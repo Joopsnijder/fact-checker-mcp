@@ -527,16 +527,19 @@ def export_to_markdown(
         original_filename: Optional original filename to base the markdown filename on
 
     Returns:
-        The filename of the created markdown file
+        The full path of the created markdown file
     """
-    # Generate filename with fc prefix
+    # Generate filename with fc prefix and place in same directory as input file
     if original_filename:
-        # Use same base name as original file with fc prefix
-        base_name = Path(original_filename).stem
-        output_file = f"fc_{base_name}.md"
+        # Convert to Path object
+        original_path = Path(original_filename)
+        # Use same directory and base name as original file with fc prefix
+        output_dir = original_path.parent
+        base_name = original_path.stem
+        output_file = output_dir / f"fc_{base_name}.md"
     else:
-        # Use timestamp with fc prefix
-        output_file = f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        # Use timestamp with fc prefix in current directory
+        output_file = Path(f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
 
     # Create markdown content
     markdown_content = f"""# Fact Check Report
@@ -613,7 +616,7 @@ For more information or to run your own fact checks, see the [Fact Checker docum
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(markdown_content)
 
-    return output_file
+    return str(output_file)
 
 
 # ============================================
@@ -672,14 +675,18 @@ def run_standalone_check(
     print(f"Onwaar: {report_data.get('false_claims', 0)}")
     print(f"\nSamenvatting: {report_data.get('summary', 'No summary available')}")
 
-    # Save rapport in JSON (default)
+    # Save rapport in JSON (default) - in same directory as input file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if input_filename:
-        base_name = Path(input_filename).stem
-        json_output = f"{base_name}_fact_check_{timestamp}.json"
+        # Convert to Path object
+        input_path = Path(input_filename)
+        # Use same directory as input file
+        output_dir = input_path.parent
+        base_name = input_path.stem
+        json_output = output_dir / f"{base_name}_fact_check_{timestamp}.json"
     else:
-        json_output = f"fact_check_{timestamp}.json"
+        json_output = Path(f"fact_check_{timestamp}.json")
 
     with open(json_output, "w", encoding="utf-8") as f:
         json.dump(report_data, f, indent=2, ensure_ascii=False)
