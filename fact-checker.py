@@ -269,6 +269,13 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
     )
 
     result = crew.kickoff()
+    
+    # Ensure the timestamp is always current (override any AI-generated placeholder)
+    if hasattr(result, 'timestamp'):
+        result.timestamp = datetime.now().isoformat()
+    elif hasattr(result, 'raw') and isinstance(result.raw, dict):
+        result.raw['timestamp'] = datetime.now().isoformat()
+    
     return result
 
 
@@ -664,6 +671,9 @@ def run_standalone_check(
                 else str(report_data),
             )
             return crew_result
+
+    # Always ensure we have the current timestamp (override any AI-generated placeholders)
+    report_data['timestamp'] = datetime.now().isoformat()
 
     # Print rapport
     print("\n### FACT CHECK RAPPORT ###\n")
