@@ -69,22 +69,36 @@ if [ $? -eq 0 ]; then
             osascript -e "display notification \"Fact check complete! Results saved to $(basename "$RECENT_MD")\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
             open "$RECENT_MD"
         else
-            # Show all fc_*.md files in directory for debugging
-            MD_FILES=$(ls "$DIR_PATH"/fc_*.md 2>/dev/null)
-            if [ -n "$MD_FILES" ]; then
-                # Open the most recent one
-                LATEST_MD=$(ls -t "$DIR_PATH"/fc_*.md 2>/dev/null | head -n 1)
-                osascript -e "display notification \"Found fact check report: $(basename "$LATEST_MD")\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
-                open "$LATEST_MD"
+            # Check for fallback file on Desktop (in case of OneDrive permission issues)
+            DESKTOP_FALLBACK="$HOME/Desktop/fc_${BASE_NAME_NO_EXT}.md"
+            if [ -f "$DESKTOP_FALLBACK" ]; then
+                osascript -e "display notification \"Fact check complete! Results saved to Desktop due to folder permissions\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
+                open "$DESKTOP_FALLBACK"
             else
-                # Check if any files were created at all
-                JSON_FILES=$(ls "$DIR_PATH"/*fact_check*.json 2>/dev/null)
-                if [ -n "$JSON_FILES" ]; then
-                    osascript -e "display dialog \"Fact check completed! JSON data was saved but markdown file missing. Check $DIR_PATH for results.\" buttons {\"Open Folder\"} default button \"Open Folder\" with icon caution"
-                    open "$DIR_PATH"
+                # Look for any recent fc_*.md file on Desktop
+                DESKTOP_RECENT=$(find "$HOME/Desktop" -name "fc_*.md" -mmin -2 -type f | head -n 1)
+                if [ -n "$DESKTOP_RECENT" ]; then
+                    osascript -e "display notification \"Fact check complete! Results saved to Desktop: $(basename "$DESKTOP_RECENT")\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
+                    open "$DESKTOP_RECENT"
                 else
-                    osascript -e "display dialog \"Fact check completed but no output files found. Check $DIR_PATH for any error logs.\" buttons {\"Open Folder\"} default button \"Open Folder\" with icon stop"
-                    open "$DIR_PATH"
+                    # Show all fc_*.md files in directory for debugging
+                    MD_FILES=$(ls "$DIR_PATH"/fc_*.md 2>/dev/null)
+                    if [ -n "$MD_FILES" ]; then
+                        # Open the most recent one
+                        LATEST_MD=$(ls -t "$DIR_PATH"/fc_*.md 2>/dev/null | head -n 1)
+                        osascript -e "display notification \"Found fact check report: $(basename "$LATEST_MD")\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
+                        open "$LATEST_MD"
+                    else
+                        # Check if any files were created at all
+                        JSON_FILES=$(ls "$DIR_PATH"/*fact_check*.json 2>/dev/null)
+                        if [ -n "$JSON_FILES" ]; then
+                            osascript -e "display dialog \"Fact check completed! JSON data was saved but markdown file missing. Check $DIR_PATH for results.\" buttons {\"Open Folder\"} default button \"Open Folder\" with icon caution"
+                            open "$DIR_PATH"
+                        else
+                            osascript -e "display dialog \"Fact check completed but no output files found. Check $DIR_PATH for any error logs.\" buttons {\"Open Folder\"} default button \"Open Folder\" with icon stop"
+                            open "$DIR_PATH"
+                        fi
+                    fi
                 fi
             fi
         fi

@@ -587,7 +587,7 @@ def export_to_markdown(
     if original_filename:
         document_name = Path(original_filename).name
         document_info = f"\n**Document:** {document_name}"
-    
+
     markdown_content = f"""# 📋 Fact Check Report
 
 **Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}{document_info}
@@ -677,11 +677,45 @@ This fact check report was generated using the Fact Checker MCP Server, which us
 For more information or to run your own fact checks, see the [Fact Checker documentation](https://github.com/your-repo/fact-checker-mcp).
 """
 
-    # Write to file
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(markdown_content)
+    # Write to file with error handling for OneDrive/cloud sync issues
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
 
-    return str(output_file)
+        # Set proper file permissions to ensure it can be opened
+        # Give read/write permissions to owner, read to group and others
+        import stat
+        os.chmod(output_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+
+        return str(output_file)
+
+    except (PermissionError, OSError) as e:
+        # If we can't write to the original location (OneDrive sync issues),
+        # try writing to user's Desktop as fallback
+        print(f"Warning: Could not write to {output_file} ({e}). Trying Desktop fallback...")
+
+        desktop_path = Path.home() / "Desktop"
+        if original_filename:
+            original_path = Path(original_filename)
+            base_name = original_path.stem
+            fallback_file = desktop_path / f"fc_{base_name}.md"
+        else:
+            fallback_file = desktop_path / f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+
+        try:
+            with open(fallback_file, "w", encoding="utf-8") as f:
+                f.write(markdown_content)
+
+            # Set proper file permissions
+            import stat
+            os.chmod(fallback_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+
+            print(f"Fact check report saved to Desktop: {fallback_file}")
+            return str(fallback_file)
+
+        except Exception as fallback_error:
+            print(f"Error: Could not write file to either location. Original error: {e}, Fallback error: {fallback_error}")
+            raise e
 
 
 # ============================================
