@@ -45,24 +45,48 @@ ERROR_FILE="$DIR_PATH/fact_check_error.txt"
 # Check if the command was successful
 if [ $? -eq 0 ]; then
     # Success - find the generated markdown file
-    MARKDOWN_FILE="$DIR_PATH/fc_$(basename "$INPUT_FILE" .txt).md"
-    JSON_FILE="$DIR_PATH/$(basename "$INPUT_FILE" .txt)_fact_check_*.json"
+    # Get base filename without extension (works for any extension)
+    BASE_NAME=$(basename "$INPUT_FILE")
+    BASE_NAME_NO_EXT="${BASE_NAME%.*}"
     
-    # Check if markdown file was created
-    if [ -f "$MARKDOWN_FILE" ]; then
+    # Look for the markdown file (should be fc_[basename].md)
+    EXPECTED_MARKDOWN="$DIR_PATH/fc_${BASE_NAME_NO_EXT}.md"
+    
+    # Wait a moment for file to be written
+    sleep 2
+    
+    # First try the expected filename
+    if [ -f "$EXPECTED_MARKDOWN" ]; then
         # Show success notification
-        osascript -e "display notification \"Fact check complete! Results saved to fc_$(basename "$INPUT_FILE" .txt).md\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
+        osascript -e "display notification \"Fact check complete! Results saved to fc_${BASE_NAME_NO_EXT}.md\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
         
         # Open the markdown file in the default editor
-        open "$MARKDOWN_FILE"
+        open "$EXPECTED_MARKDOWN"
     else
-        # Look for any fc_*.md file created in the last minute
-        RECENT_MD=$(find "$DIR_PATH" -name "fc_*.md" -mmin -1 -type f | head -n 1)
+        # Look for any fc_*.md file created in the last 2 minutes in this directory
+        RECENT_MD=$(find "$DIR_PATH" -name "fc_*.md" -mmin -2 -type f | head -n 1)
         if [ -n "$RECENT_MD" ]; then
             osascript -e "display notification \"Fact check complete! Results saved to $(basename "$RECENT_MD")\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
             open "$RECENT_MD"
         else
-            osascript -e "display dialog \"Fact check completed but markdown file not found. Check $DIR_PATH for results.\" buttons {\"OK\"} default button \"OK\" with icon caution"
+            # Show all fc_*.md files in directory for debugging
+            MD_FILES=$(ls "$DIR_PATH"/fc_*.md 2>/dev/null)
+            if [ -n "$MD_FILES" ]; then
+                # Open the most recent one
+                LATEST_MD=$(ls -t "$DIR_PATH"/fc_*.md 2>/dev/null | head -n 1)
+                osascript -e "display notification \"Found fact check report: $(basename "$LATEST_MD")\" with title \"Fact Checker\" subtitle \"Success\" sound name \"Glass\""
+                open "$LATEST_MD"
+            else
+                # Check if any files were created at all
+                JSON_FILES=$(ls "$DIR_PATH"/*fact_check*.json 2>/dev/null)
+                if [ -n "$JSON_FILES" ]; then
+                    osascript -e "display dialog \"Fact check completed! JSON data was saved but markdown file missing. Check $DIR_PATH for results.\" buttons {\"Open Folder\"} default button \"Open Folder\" with icon caution"
+                    open "$DIR_PATH"
+                else
+                    osascript -e "display dialog \"Fact check completed but no output files found. Check $DIR_PATH for any error logs.\" buttons {\"Open Folder\"} default button \"Open Folder\" with icon stop"
+                    open "$DIR_PATH"
+                fi
+            fi
         fi
     fi
 else

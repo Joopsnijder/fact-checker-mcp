@@ -1,0 +1,2 @@
+- Run the available tests after changing functionality
+- When writing a test, make it a pytest
