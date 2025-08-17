@@ -1,44 +1,37 @@
 """
-Fact Checker Hybrid - CrewAI Agent + MCP Server
+Fact Checker Hybrid - CrewAI Agent
 Auteur: Joop Snijder
 Versie: 2.0
 
-Deze implementatie werkt zowel als:
-1. CrewAI multi-agent systeem voor complexe fact-checking
-2. MCP server voor directe integratie met Claude Desktop en andere MCP clients
+Deze implementatie werkt als CrewAI multi-agent systeem voor complexe fact-checking
 """
 
-import os
 import json
-import asyncio
-from typing import List, Dict, Any, Optional
+import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 # CrewAI imports
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Crew, Process, Task
 from langchain_openai import ChatOpenAI
 
 # Try to import CrewAI tools, with fallbacks for compatibility
 try:
-    from crewai_tools import SerperDevTool, WebsiteSearchTool, ScrapeWebsiteTool
+    from crewai_tools import ScrapeWebsiteTool, SerperDevTool, WebsiteSearchTool
 except ImportError:
     # Fallback for older crewai_tools versions
     SerperDevTool = None
     WebsiteSearchTool = None
     ScrapeWebsiteTool = None
 
-# MCP Server imports
-from mcp.server.fastmcp import FastMCP
-from mcp.types import Resource, Tool
-
 # Pydantic voor data modellen
 from pydantic import BaseModel, Field
-
 
 # ============================================
 # CONFIGURATIE
@@ -48,11 +41,7 @@ from pydantic import BaseModel, Field
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 
-# Initialize FastMCP server
-mcp = FastMCP(
-    name="fact-checker",
-    instructions="Fact Checker service that verifies claims and statistics in texts",
-)
+# Configuration removed - no longer using MCP server
 
 # Initialize LLM voor CrewAI
 llm = ChatOpenAI(model="gpt-4", temperature=0.1, api_key=OPENAI_API_KEY)
@@ -128,8 +117,8 @@ def create_agents():
     claim_extractor = Agent(
         role="Claim Extractor",
         goal="Identificeer alle verifieerbare claims, statistieken en feitelijke uitspraken in de tekst",
-        backstory="""Je bent een expert in het analyseren van teksten en het identificeren 
-        van claims die geverifieerd kunnen worden. Je hebt jarenlange ervaring met het 
+        backstory="""Je bent een expert in het analyseren van teksten en het identificeren
+        van claims die geverifieerd kunnen worden. Je hebt jarenlange ervaring met het
         onderscheiden van meningen van feiten.""",
         verbose=True,
         allow_delegation=False,
@@ -140,7 +129,7 @@ def create_agents():
     research_specialist = Agent(
         role="Research Specialist",
         goal="Zoek betrouwbare bronnen om claims te verifiëren",
-        backstory="""Je bent een onderzoeksexpert met toegang tot het internet. 
+        backstory="""Je bent een onderzoeksexpert met toegang tot het internet.
         Je specialiteit is het vinden van autoritatieve bronnen.""",
         verbose=True,
         allow_delegation=False,
@@ -156,8 +145,9 @@ def create_agents():
     verification_analyst = Agent(
         role="Fact Verification Analyst",
         goal="Vergelijk claims met gevonden bronnen en bepaal waarheidsgehalte",
-        backstory="""Je bent een analyticus gespecialiseerd in fact-checking. 
-        Je maakt genuanceerde oordelen over de waarheid van claims.""",
+        backstory="""Je bent een analyticus gespecialiseerd in fact-checking.
+        Je maakt genuanceerde oordelen over de waarheid van claims.
+        BELANGRIJK: Je neemt altijd de exacte URLs van bronnen over uit het onderzoek.""",
         verbose=True,
         allow_delegation=False,
         llm=llm,
@@ -167,8 +157,10 @@ def create_agents():
     report_compiler = Agent(
         role="Report Compiler",
         goal="Stel een helder en actionable fact-check rapport samen",
-        backstory="""Je bent een expert in het schrijven van heldere fact-check 
-        rapporten in normale, directe taal.""",
+        backstory="""Je bent een expert in het schrijven van heldere fact-check
+        rapporten in normale, directe taal. 
+        BELANGRIJK: Je zorgt ervoor dat alle bronnen (URLs) uit voorgaande taken
+        correct worden opgenomen in het finale rapport.""",
         verbose=True,
         allow_delegation=False,
         llm=llm,
@@ -217,9 +209,12 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         description="""
         Onderzoek elke geïdentificeerde claim.
         Zoek naar betrouwbare bronnen en documenteer je bevindingen.
+        
+        BELANGRIJK: Bewaar de EXACTE URLs van alle bronnen die je gebruikt.
+        Voor elke claim, geef een lijst van alle URLs die je hebt geraadpleegd.
         """,
         agent=research_specialist,
-        expected_output="Onderzoeksresultaten voor elke claim met bronvermelding",
+        expected_output="Onderzoeksresultaten voor elke claim met EXACTE URLs van alle bronnen",
         context=[extract_claims_task],
     )
 
@@ -228,9 +223,12 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         description="""
         Verifieer elke claim op basis van het onderzoek.
         Bepaal de verificatiestatus en betrouwbaarheidsscore.
+        
+        BELANGRIJK: Voeg de EXACTE URLs van de bronnen toe die gebruikt zijn voor verificatie.
+        Voor elke claim moet je de sources uit de research fase meenemen.
         """,
         agent=verification_analyst,
-        expected_output="Verificatiestatus en analyse voor elke claim",
+        expected_output="Verificatiestatus, analyse en bronnen voor elke claim",
         context=[extract_claims_task, research_claims_task],
     )
 
@@ -239,9 +237,13 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         description="""
         Stel een professioneel fact-check rapport samen.
         Schrijf helder en direct, vermijd clichés.
+        
+        BELANGRIJK: Zorg ervoor dat alle sources/bronnen uit de vorige taken 
+        correct worden opgenomen in het finale rapport. Elke claim moet 
+        de bijbehorende URLs bevatten.
         """,
         agent=report_compiler,
-        expected_output="Een compleet fact-check rapport",
+        expected_output="Een compleet fact-check rapport met alle bronnen",
         context=[extract_claims_task, research_claims_task, verify_claims_task],
         output_pydantic=FactCheckReport,
     )
@@ -301,70 +303,77 @@ async def quick_fact_check(text: str) -> Dict[str, Any]:
 
 
 # ============================================
-# MCP SERVER RESOURCES
+# PERSISTENT HISTORY MANAGEMENT
 # ============================================
 
-# Store voor fact check geschiedenis
-fact_check_history: List[FactCheckReport] = []
+HISTORY_FILE = Path("fact_check_history.json")
 
 
-@mcp.resource("history://list")
-async def get_fact_check_history() -> Resource:
-    """Krijg de geschiedenis van alle fact checks"""
-    return Resource(
-        uri="history://list",
-        name="Fact Check History",
-        description="Lijst van alle uitgevoerde fact checks",
-        mimeType="application/json",
-        text=json.dumps(
-            [
-                {
-                    "id": i,
-                    "timestamp": report.timestamp,
-                    "overall_reliability": report.overall_reliability,
-                    "total_claims": report.total_claims,
-                    "false_claims": report.false_claims,
-                }
-                for i, report in enumerate(fact_check_history)
-            ],
-            indent=2,
-        ),
-    )
+def load_history() -> List[FactCheckReport]:
+    """Laad geschiedenis uit JSON bestand"""
+    if not HISTORY_FILE.exists():
+        return []
 
-
-@mcp.resource("history://report/{report_id}")
-async def get_specific_report(report_id: str) -> Resource:
-    """Krijg een specifiek fact check rapport"""
     try:
-        idx = int(report_id)
-        if 0 <= idx < len(fact_check_history):
-            report = fact_check_history[idx]
-            return Resource(
-                uri=f"history://report/{report_id}",
-                name=f"Fact Check Report #{report_id}",
-                description=f"Rapport van {report.timestamp}",
-                mimeType="application/json",
-                text=report.model_dump_json(indent=2),
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return [FactCheckReport.model_validate(item) for item in data]
+    except Exception as e:
+        print(f"Warning: Could not load history: {e}")
+        return []
+
+
+def save_history(history: List[FactCheckReport]):
+    """Sla geschiedenis op in JSON bestand"""
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                [report.model_dump() for report in history],
+                f,
+                indent=2,
+                ensure_ascii=False,
             )
-    except (ValueError, IndexError):
-        pass
+    except Exception as e:
+        print(f"Warning: Could not save history: {e}")
 
-    return Resource(
-        uri=f"history://report/{report_id}",
-        name="Report Not Found",
-        description="Dit rapport bestaat niet",
-        mimeType="text/plain",
-        text="Report niet gevonden",
-    )
+
+def add_to_history(report: FactCheckReport):
+    """Voeg rapport toe aan geschiedenis en sla op"""
+    fact_check_history.append(report)
+    save_history(fact_check_history)
+
+
+# Store voor fact check geschiedenis - laad bij startup
+fact_check_history: List[FactCheckReport] = load_history()
+
+
+def get_fact_check_history_list():
+    """Krijg de geschiedenis van alle fact checks"""
+    return [
+        {
+            "id": i,
+            "timestamp": report.timestamp,
+            "overall_reliability": report.overall_reliability,
+            "total_claims": report.total_claims,
+            "false_claims": report.false_claims,
+        }
+        for i, report in enumerate(fact_check_history)
+    ]
+
+
+def get_specific_report(report_id: int):
+    """Krijg een specifiek fact check rapport"""
+    if 0 <= report_id < len(fact_check_history):
+        return fact_check_history[report_id].model_dump()
+    return None
 
 
 # ============================================
-# MCP SERVER TOOLS
+# UTILITY FUNCTIONS
 # ============================================
 
 
-@mcp.tool()
-async def quick_verify(text: str) -> str:
+def quick_verify_text(text: str):
     """
     Snelle verificatie van een korte claim of statistiek.
 
@@ -375,18 +384,32 @@ async def quick_verify(text: str) -> str:
         Quick verification result
     """
     if len(text) > 500:
-        return json.dumps(
-            {
-                "error": "Text te lang voor quick verify. Gebruik deep_fact_check voor langere teksten."
-            }
-        )
+        return {
+            "error": "Text te lang voor quick verify. Gebruik deep_fact_check voor langere teksten."
+        }
 
-    result = await quick_fact_check(text)
-    return json.dumps(result, indent=2)
+    # Simplified version without async
+    try:
+        # Gebruik search tool direct voor snelle checks
+        search_results = search_tool.run(f"fact check verify {text[:100]}")
+
+        # Basis analyse
+        return {
+            "status": "quick_check",
+            "text": text,
+            "initial_search": search_results,
+            "timestamp": datetime.now().isoformat(),
+            "note": "Voor volledige verificatie, gebruik deep_fact_check",
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
-@mcp.tool()
-async def deep_fact_check(text: str) -> str:
+def deep_fact_check_text(text: str):
     """
     Uitgebreide fact check met multi-agent verificatie.
     Gebruikt CrewAI voor grondige verificatie van alle claims.
@@ -399,97 +422,198 @@ async def deep_fact_check(text: str) -> str:
     """
     try:
         # Run de CrewAI crew (dit kan even duren)
-        report = await asyncio.to_thread(run_fact_check_crew, text)
+        report = run_fact_check_crew(text)
 
         # Voeg toe aan geschiedenis
-        fact_check_history.append(report)
+        add_to_history(report)
 
-        # Return als JSON
-        return report.model_dump_json(indent=2)
+        # Return als dict
+        return report.model_dump()
 
     except Exception as e:
-        return json.dumps(
-            {
-                "error": f"Fact check mislukt: {str(e)}",
-                "timestamp": datetime.now().isoformat(),
-            }
-        )
+        return {
+            "error": f"Fact check mislukt: {str(e)}",
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
-@mcp.tool()
-async def check_specific_statistic(
-    statistic: str, context: str = "", year: Optional[int] = None
-) -> str:
+# def export_to_markdown(
+#     report_data: Dict[str, Any], original_filename: str = None
+# ) -> str:
+#     """
+#     Krijg een samenvatting van alle fact checks.
+
+#     Returns:
+#         Samenvatting van fact check geschiedenis
+#     """
+#     if not fact_check_history:
+#         return json.dumps({"message": "Nog geen fact checks uitgevoerd", "total": 0})
+
+#     total_claims = sum(r.total_claims for r in fact_check_history)
+#     total_false = sum(r.false_claims for r in fact_check_history)
+
+#     summary = {
+#         "total_reports": len(fact_check_history),
+#         "total_claims_checked": total_claims,
+#         "total_false_claims": total_false,
+#         "accuracy_rate": f"{((total_claims - total_false) / total_claims * 100):.1f}%"
+#         if total_claims > 0
+#         else "N/A",
+#         "recent_checks": [
+#             {
+#                 "timestamp": r.timestamp,
+#                 "reliability": r.overall_reliability,
+#                 "claims": r.total_claims,
+#             }
+#             for r in fact_check_history[-5:]  # Laatste 5
+#         ],
+#     }
+
+#     return summary
+
+
+def export_report_to_markdown_by_id(report_id: int, base_filename: str = None):
     """
-    Verifieer een specifieke statistiek met optionele context.
+    Export een fact check rapport naar markdown formaat.
 
     Args:
-        statistic: De statistiek om te verifiëren (bijv. "GPT-4 heeft 175 miljard parameters")
-        context: Optionele context voor betere verificatie
-        year: Optioneel jaar voor tijdsgevoelige statistieken
+        report_id: ID van het rapport in de geschiedenis (0-based)
+        base_filename: Optionele basis bestandsnaam voor het markdown bestand
 
     Returns:
-        Verificatie resultaat met bronnen
+        Status van de export operatie
     """
-    search_query = statistic
-    if context:
-        search_query += f" {context}"
-    if year:
-        search_query += f" {year}"
-
     try:
-        # Gebruik search tool
-        search_results = search_tool.run(search_query)
+        if 0 <= report_id < len(fact_check_history):
+            report = fact_check_history[report_id]
+            report_data = report.model_dump()
 
-        # Basis verificatie
-        return json.dumps(
-            {
-                "statistic": statistic,
-                "context": context,
-                "year": year,
-                "search_results": search_results,
+            # Generate markdown file
+            markdown_filename = export_to_markdown(report_data, base_filename)
+
+            return {
+                "status": "success",
+                "message": f"Report successfully exported to {markdown_filename}",
+                "filename": markdown_filename,
                 "timestamp": datetime.now().isoformat(),
-                "note": "Voor volledige verificatie met bronanalyse, gebruik deep_fact_check",
-            },
-            indent=2,
-        )
-
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Report ID {report_id} not found. Available IDs: 0-{len(fact_check_history) - 1}",
+                "timestamp": datetime.now().isoformat(),
+            }
     except Exception as e:
-        return json.dumps({"error": str(e), "timestamp": datetime.now().isoformat()})
+        return {
+            "status": "error",
+            "message": f"Failed to export report: {str(e)}",
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
-@mcp.tool()
-async def get_history_summary() -> str:
+# ============================================
+# MARKDOWN EXPORT FUNCTIONALITY
+# ============================================
+
+
+def export_to_markdown(
+    report_data: Dict[str, Any], original_filename: str = None
+) -> str:
     """
-    Krijg een samenvatting van alle fact checks.
+    Export fact check report to markdown format
+
+    Args:
+        report_data: The fact check report data
+        original_filename: Optional original filename to base the markdown filename on
 
     Returns:
-        Samenvatting van fact check geschiedenis
+        The filename of the created markdown file
     """
-    if not fact_check_history:
-        return json.dumps({"message": "Nog geen fact checks uitgevoerd", "total": 0})
+    # Generate filename with fc prefix
+    if original_filename:
+        # Use same base name as original file with fc prefix
+        base_name = Path(original_filename).stem
+        output_file = f"fc_{base_name}.md"
+    else:
+        # Use timestamp with fc prefix
+        output_file = f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
 
-    total_claims = sum(r.total_claims for r in fact_check_history)
-    total_false = sum(r.false_claims for r in fact_check_history)
+    # Create markdown content
+    markdown_content = f"""# Fact Check Report
 
-    summary = {
-        "total_reports": len(fact_check_history),
-        "total_claims_checked": total_claims,
-        "total_false_claims": total_false,
-        "accuracy_rate": f"{((total_claims - total_false) / total_claims * 100):.1f}%"
-        if total_claims > 0
-        else "N/A",
-        "recent_checks": [
-            {
-                "timestamp": r.timestamp,
-                "reliability": r.overall_reliability,
-                "claims": r.total_claims,
-            }
-            for r in fact_check_history[-5:]  # Laatste 5
-        ],
-    }
+**Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}
 
-    return json.dumps(summary, indent=2)
+## Summary
+
+- **Overall Reliability:** {report_data.get("overall_reliability", "Unknown")}
+- **Total Claims:** {report_data.get("total_claims", 0)}
+- **Verified Claims:** {report_data.get("verified_claims", 0)}
+- **False Claims:** {report_data.get("false_claims", 0)}
+- **Unverifiable Claims:** {report_data.get("unverifiable_claims", 0)}
+
+## Executive Summary
+
+{report_data.get("summary", "No summary available")}
+
+## Detailed Verification Results
+
+"""
+
+    # Add individual verifications if available
+    verifications = report_data.get("verifications", [])
+    if verifications:
+        for i, verification in enumerate(verifications, 1):
+            markdown_content += f"""### Claim {i}: {verification.get("claim_type", "General").title()}
+
+**Original Claim:** {verification.get("original_claim", "N/A")}
+
+**Verification Status:** {verification.get("verification_status", "Unknown")}
+
+**Confidence Score:** {verification.get("confidence_score", "N/A")}
+
+**Explanation:** {verification.get("explanation", "No explanation provided")}
+
+"""
+
+            # Add correct information if available
+            if verification.get("correct_information"):
+                markdown_content += f"**Correct Information:** {verification['correct_information']}\n\n"
+
+            # Add sources
+            sources = verification.get("sources", [])
+            if sources:
+                markdown_content += "**Sources:**\n"
+                for source in sources:
+                    markdown_content += f"- {source}\n"
+                markdown_content += "\n"
+
+            markdown_content += "---\n\n"
+    else:
+        markdown_content += "No detailed verifications available.\n\n"
+
+    # Add original text section
+    if report_data.get("original_text"):
+        markdown_content += f"""## Original Text
+
+```
+{report_data["original_text"]}
+```
+
+"""
+
+    # Add footer
+    markdown_content += """## About This Report
+
+This fact check report was generated using the Fact Checker MCP Server, which uses multi-agent verification powered by CrewAI to analyze claims and verify information against reliable sources.
+
+For more information or to run your own fact checks, see the [Fact Checker documentation](https://github.com/your-repo/fact-checker-mcp).
+"""
+
+    # Write to file
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(markdown_content)
+
+    return output_file
 
 
 # ============================================
@@ -497,7 +621,9 @@ async def get_history_summary() -> str:
 # ============================================
 
 
-def run_standalone_check(text: str):
+def run_standalone_check(
+    text: str, input_filename: str = None, export_markdown: bool = False
+):
     """Run als standalone CrewAI applicatie"""
     print("\n" + "=" * 50)
     print("FACT CHECKER - STANDALONE MODE")
@@ -518,6 +644,24 @@ def run_standalone_check(text: str):
             print(f"Could not parse crew result: {e}")
             return crew_result
 
+    # Ensure report_data is a dict, not a string
+    if isinstance(report_data, str):
+        try:
+            import json
+
+            report_data = json.loads(report_data)
+        except (json.JSONDecodeError, ValueError):
+            print(
+                f"Error: Could not parse report data as JSON. Got: {type(report_data)}"
+            )
+            print(
+                "Raw data:",
+                str(report_data)[:200] + "..."
+                if len(str(report_data)) > 200
+                else str(report_data),
+            )
+            return crew_result
+
     # Print rapport
     print("\n### FACT CHECK RAPPORT ###\n")
     print(
@@ -528,11 +672,23 @@ def run_standalone_check(text: str):
     print(f"Onwaar: {report_data.get('false_claims', 0)}")
     print(f"\nSamenvatting: {report_data.get('summary', 'No summary available')}")
 
-    # Save rapport
-    output_file = f"fact_check_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(output_file, "w", encoding="utf-8") as f:
+    # Save rapport in JSON (default)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if input_filename:
+        base_name = Path(input_filename).stem
+        json_output = f"{base_name}_fact_check_{timestamp}.json"
+    else:
+        json_output = f"fact_check_{timestamp}.json"
+
+    with open(json_output, "w", encoding="utf-8") as f:
         json.dump(report_data, f, indent=2, ensure_ascii=False)
-    print(f"\nRapport opgeslagen als: {output_file}")
+    print(f"\nJSON rapport opgeslagen als: {json_output}")
+
+    # Also save as markdown if requested
+    if export_markdown:
+        markdown_output = export_to_markdown(report_data, input_filename)
+        print(f"Markdown rapport opgeslagen als: {markdown_output}")
 
     return crew_result
 
@@ -541,39 +697,74 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--mcp":
-            # Start als MCP server
-            mcp.run()
-        elif sys.argv[1] == "--check":
+        if sys.argv[1] == "--check":
             # Run standalone check met tekst uit bestand of stdin
+            input_filename = None
+            export_markdown = False
+
+            # Check for --markdown flag
+            if "--markdown" in sys.argv:
+                export_markdown = True
+                # Remove the flag from sys.argv for processing
+                sys.argv = [arg for arg in sys.argv if arg != "--markdown"]
+
             if len(sys.argv) > 2:
                 # Lees uit bestand
-                with open(sys.argv[2], "r", encoding="utf-8") as f:
+                input_filename = sys.argv[2]
+                with open(input_filename, "r", encoding="utf-8") as f:
                     text = f.read()
             else:
                 # Lees van stdin
                 print("Voer tekst in om te checken (Ctrl+D om te eindigen):")
                 text = sys.stdin.read()
 
-            run_standalone_check(text)
+            run_standalone_check(text, input_filename, export_markdown)
+        elif sys.argv[1] == "--web":
+            # Start web UI
+            from web_ui import launch_web_ui
+
+            # Parse optional arguments for web UI
+            host = "127.0.0.1"
+            port = 7860
+            share = False
+
+            # Look for additional arguments
+            for _i, arg in enumerate(sys.argv[2:], start=2):
+                if arg.startswith("--host="):
+                    host = arg.split("=", 1)[1]
+                elif arg.startswith("--port="):
+                    port = int(arg.split("=", 1)[1])
+                elif arg == "--share":
+                    share = True
+
+            launch_web_ui(host=host, port=port, share=share)
+
         elif sys.argv[1] == "--help":
             print("""
-        Fact Checker - Hybrid CrewAI + MCP Implementation
+        Fact Checker - CrewAI Multi-Agent System
         
         Gebruik:
         -------
-        Als MCP Server:
-            python fact_checker.py --mcp
-            mcp dev fact_checker.py
+        Fact Checking:
+            python fact_checker.py --check [bestand.txt] [--markdown]
+            echo "tekst om te checken" | python fact_checker.py --check [--markdown]
             
-        Als Standalone:
-            python fact_checker.py --check [bestand.txt]
-            echo "tekst om te checken" | python fact_checker.py --check
+        Voorbeelden:
+            python fact_checker.py --check document.txt --markdown
+            python fact_checker.py --check document.txt  # Alleen JSON export
+            echo "Tesla heeft 50000 werknemers" | python fact_checker.py --check --markdown
+            
+        Als Web UI:
+            python fact_checker.py --web
+            python fact_checker.py --web --host=0.0.0.0 --port=8080 --share
+            
+        Opties:
+            --markdown      Export resultaten ook als markdown bestand (fc_*.md)
             
         In Python code:
             from fact_checker import run_fact_check_crew
             report = run_fact_check_crew("je tekst hier")
         """)
     else:
-        # Default to MCP server mode when run without arguments (voor mcp dev)
-        mcp.run()
+        # Default to help when run without arguments
+        print("Gebruik --help voor instructies over hoe de fact checker te gebruiken.")
