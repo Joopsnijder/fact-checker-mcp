@@ -147,6 +147,18 @@ def create_agents():
         goal="Vergelijk claims met gevonden bronnen en bepaal waarheidsgehalte",
         backstory="""Je bent een analyticus gespecialiseerd in fact-checking.
         Je maakt genuanceerde oordelen over de waarheid van claims.
+        
+        BELANGRIJKE REGELS VOOR VERIFICATION_STATUS:
+        - Gebruik "Geverifieerd en correct" als de claim klopt met de bronnen
+        - Gebruik "Geverifieerd en onjuist" als de claim NIET klopt met de bronnen EN je hebt correcte informatie gevonden
+        - Gebruik "Niet geverifieerd" alleen als je geen betrouwbare bronnen kon vinden
+        - Gebruik "Niet onderzocht" als de claim niet relevant is voor fact-checking
+        
+        Als je correcte informatie vindt die de originele claim tegenspreekt, moet je:
+        1. verification_status instellen op "Geverifieerd en onjuist"
+        2. confidence_score instellen op 1.0
+        3. correct_information vullen met de juiste informatie
+        
         BELANGRIJK: Je neemt altijd de exacte URLs van bronnen over uit het onderzoek.""",
         verbose=True,
         allow_delegation=False,
@@ -159,8 +171,15 @@ def create_agents():
         goal="Stel een helder en actionable fact-check rapport samen",
         backstory="""Je bent een expert in het schrijven van heldere fact-check
         rapporten in normale, directe taal. 
+        
+        TELLING REGELS VOOR STATISTIEKEN:
+        - verified_claims = aantal claims met status "Geverifieerd en correct"
+        - false_claims = aantal claims met status "Geverifieerd en onjuist" 
+        - unverifiable_claims = aantal claims met status "Niet geverifieerd" of "Niet onderzocht"
+        - total_claims = som van alle bovenstaande
+        
         BELANGRIJK: Je zorgt ervoor dat alle bronnen (URLs) uit voorgaande taken
-        correct worden opgenomen in het finale rapport.""",
+        correct worden opgenomen in het finale rapport en dat de tellingen kloppen.""",
         verbose=True,
         allow_delegation=False,
         llm=llm,
@@ -224,11 +243,19 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         Verifieer elke claim op basis van het onderzoek.
         Bepaal de verificatiestatus en betrouwbaarheidsscore.
         
-        BELANGRIJK: Voeg de EXACTE URLs van de bronnen toe die gebruikt zijn voor verificatie.
-        Voor elke claim moet je de sources uit de research fase meenemen.
+        VERIFICATIE REGELS:
+        1. Als de claim KLOPT met de bronnen: verification_status = "Geverifieerd en correct", confidence_score = 1.0
+        2. Als de claim NIET KLOPT en je hebt correcte informatie: verification_status = "Geverifieerd en onjuist", confidence_score = 1.0, vul correct_information in
+        3. Als je geen betrouwbare bronnen vindt: verification_status = "Niet geverifieerd", confidence_score = 0.0
+        4. Als de claim niet fact-checkbaar is: verification_status = "Niet onderzocht", confidence_score = 0.0
+        
+        BELANGRIJK: 
+        - Voeg de EXACTE URLs van de bronnen toe die gebruikt zijn voor verificatie
+        - Voor elke claim moet je de sources uit de research fase meenemen
+        - Als je correcte informatie hebt die de claim tegenspreekt, markeer dit als "Geverifieerd en onjuist"
         """,
         agent=verification_analyst,
-        expected_output="Verificatiestatus, analyse en bronnen voor elke claim",
+        expected_output="Verificatiestatus, analyse en bronnen voor elke claim volgens de verificatie regels",
         context=[extract_claims_task, research_claims_task],
     )
 
@@ -238,12 +265,19 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         Stel een professioneel fact-check rapport samen.
         Schrijf helder en direct, vermijd clichés.
         
-        BELANGRIJK: Zorg ervoor dat alle sources/bronnen uit de vorige taken 
-        correct worden opgenomen in het finale rapport. Elke claim moet 
-        de bijbehorende URLs bevatten.
+        TELLING INSTRUCTIES:
+        - Tel ALLEEN claims met "Geverifieerd en correct" als verified_claims
+        - Tel ALLEEN claims met "Geverifieerd en onjuist" als false_claims  
+        - Tel claims met "Niet geverifieerd" of "Niet onderzocht" als unverifiable_claims
+        - Controleer dat total_claims = verified_claims + false_claims + unverifiable_claims
+        
+        BELANGRIJK: 
+        - Zorg ervoor dat alle sources/bronnen uit de vorige taken correct worden opgenomen
+        - Elke claim moet de bijbehorende URLs bevatten
+        - De tellingen in de statistieken moeten exact kloppen met de verification_status waarden
         """,
         agent=report_compiler,
-        expected_output="Een compleet fact-check rapport met alle bronnen",
+        expected_output="Een compleet fact-check rapport met correcte tellingen en alle bronnen",
         context=[extract_claims_task, research_claims_task, verify_claims_task],
         output_pydantic=FactCheckReport,
     )
@@ -269,13 +303,13 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
     )
 
     result = crew.kickoff()
-    
+
     # Ensure the timestamp is always current (override any AI-generated placeholder)
     if hasattr(result, 'timestamp'):
         result.timestamp = datetime.now().isoformat()
     elif hasattr(result, 'raw') and isinstance(result.raw, dict):
         result.raw['timestamp'] = datetime.now().isoformat()
-    
+
     return result
 
 
@@ -549,9 +583,14 @@ def export_to_markdown(
         output_file = Path(f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
 
     # Create markdown content
+    document_info = ""
+    if original_filename:
+        document_name = Path(original_filename).name
+        document_info = f"\n**Document:** {document_name}"
+    
     markdown_content = f"""# 📋 Fact Check Report
 
-**Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}
+**Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}{document_info}
 
 ---
 
@@ -579,21 +618,27 @@ def export_to_markdown(
         for i, verification in enumerate(verifications, 1):
             # Add claim header with better formatting
             markdown_content += f"### Claim {i}: {verification.get('claim_type', 'General').title()}\n\n"
-            
+
             # Create a table for better readability
             markdown_content += "| Field | Value |\n"
             markdown_content += "|-------|-------|\n"
             markdown_content += f"| **Original Claim** | {verification.get('original_claim', 'N/A')} |\n"
             markdown_content += f"| **Verification Status** | {verification.get('verification_status', 'Unknown')} |\n"
             markdown_content += f"| **Confidence Score** | {verification.get('confidence_score', 'N/A')} |\n\n"
-            
+
             # Add explanation as a separate section with better formatting
             markdown_content += "#### 📊 Analysis\n\n"
             markdown_content += f"{verification.get('explanation', 'No explanation provided')}\n\n"
 
-            # Add correct information if available
+            # Add correct information if available - with appropriate styling based on verification status
             if verification.get("correct_information"):
-                markdown_content += "#### ✅ Correct Information\n\n"
+                verification_status = verification.get("verification_status", "")
+                if "onjuist" in verification_status.lower():
+                    # For false claims, show what the correct information should be
+                    markdown_content += "#### ❌ Correct Information (Original Claim is False)\n\n"
+                else:
+                    # For other cases where we have additional correct information
+                    markdown_content += "#### ✅ Additional Information\n\n"
                 markdown_content += f"{verification['correct_information']}\n\n"
 
             # Add sources with better formatting
