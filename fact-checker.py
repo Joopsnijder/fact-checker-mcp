@@ -549,19 +549,23 @@ def export_to_markdown(
         output_file = Path(f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
 
     # Create markdown content
-    markdown_content = f"""# Fact Check Report
+    markdown_content = f"""# 📋 Fact Check Report
 
 **Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}
 
-## Summary
+---
 
-- **Overall Reliability:** {report_data.get("overall_reliability", "Unknown")}
-- **Total Claims:** {report_data.get("total_claims", 0)}
-- **Verified Claims:** {report_data.get("verified_claims", 0)}
-- **False Claims:** {report_data.get("false_claims", 0)}
-- **Unverifiable Claims:** {report_data.get("unverifiable_claims", 0)}
+## 📊 Summary Statistics
 
-## Executive Summary
+| Metric | Value |
+|--------|-------|
+| **Overall Reliability** | {report_data.get("overall_reliability", "Unknown")} |
+| **Total Claims Analyzed** | {report_data.get("total_claims", 0)} |
+| **✅ Verified Claims** | {report_data.get("verified_claims", 0)} |
+| **❌ False Claims** | {report_data.get("false_claims", 0)} |
+| **❓ Unverifiable Claims** | {report_data.get("unverifiable_claims", 0)} |
+
+## 📝 Executive Summary
 
 {report_data.get("summary", "No summary available")}
 
@@ -573,28 +577,37 @@ def export_to_markdown(
     verifications = report_data.get("verifications", [])
     if verifications:
         for i, verification in enumerate(verifications, 1):
-            markdown_content += f"""### Claim {i}: {verification.get("claim_type", "General").title()}
-
-**Original Claim:** {verification.get("original_claim", "N/A")}
-
-**Verification Status:** {verification.get("verification_status", "Unknown")}
-
-**Confidence Score:** {verification.get("confidence_score", "N/A")}
-
-**Explanation:** {verification.get("explanation", "No explanation provided")}
-
-"""
+            # Add claim header with better formatting
+            markdown_content += f"### Claim {i}: {verification.get('claim_type', 'General').title()}\n\n"
+            
+            # Create a table for better readability
+            markdown_content += "| Field | Value |\n"
+            markdown_content += "|-------|-------|\n"
+            markdown_content += f"| **Original Claim** | {verification.get('original_claim', 'N/A')} |\n"
+            markdown_content += f"| **Verification Status** | {verification.get('verification_status', 'Unknown')} |\n"
+            markdown_content += f"| **Confidence Score** | {verification.get('confidence_score', 'N/A')} |\n\n"
+            
+            # Add explanation as a separate section with better formatting
+            markdown_content += "#### 📊 Analysis\n\n"
+            markdown_content += f"{verification.get('explanation', 'No explanation provided')}\n\n"
 
             # Add correct information if available
             if verification.get("correct_information"):
-                markdown_content += f"**Correct Information:** {verification['correct_information']}\n\n"
+                markdown_content += "#### ✅ Correct Information\n\n"
+                markdown_content += f"{verification['correct_information']}\n\n"
 
-            # Add sources
+            # Add sources with better formatting
             sources = verification.get("sources", [])
             if sources:
-                markdown_content += "**Sources:**\n"
+                markdown_content += "#### 📚 Sources\n\n"
                 for source in sources:
-                    markdown_content += f"- {source}\n"
+                    # Make URLs clickable and add bullet points
+                    if source.startswith('http'):
+                        # Extract domain for display
+                        domain = source.split('/')[2] if len(source.split('/')) > 2 else source
+                        markdown_content += f"- [{domain}]({source})\n"
+                    else:
+                        markdown_content += f"- {source}\n"
                 markdown_content += "\n"
 
             markdown_content += "---\n\n"
