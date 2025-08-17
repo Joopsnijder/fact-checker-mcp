@@ -305,10 +305,10 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
     result = crew.kickoff()
 
     # Ensure the timestamp is always current (override any AI-generated placeholder)
-    if hasattr(result, 'timestamp'):
+    if hasattr(result, "timestamp"):
         result.timestamp = datetime.now().isoformat()
-    elif hasattr(result, 'raw') and isinstance(result.raw, dict):
-        result.raw['timestamp'] = datetime.now().isoformat()
+    elif hasattr(result, "raw") and isinstance(result.raw, dict):
+        result.raw["timestamp"] = datetime.now().isoformat()
 
     return result
 
@@ -628,14 +628,18 @@ def export_to_markdown(
 
             # Add explanation as a separate section with better formatting
             markdown_content += "#### 📊 Analysis\n\n"
-            markdown_content += f"{verification.get('explanation', 'No explanation provided')}\n\n"
+            markdown_content += (
+                f"{verification.get('explanation', 'No explanation provided')}\n\n"
+            )
 
             # Add correct information if available - with appropriate styling based on verification status
             if verification.get("correct_information"):
                 verification_status = verification.get("verification_status", "")
                 if "onjuist" in verification_status.lower():
                     # For false claims, show what the correct information should be
-                    markdown_content += "#### ❌ Correct Information (Original Claim is False)\n\n"
+                    markdown_content += (
+                        "#### ❌ Correct Information (Original Claim is False)\n\n"
+                    )
                 else:
                     # For other cases where we have additional correct information
                     markdown_content += "#### ✅ Additional Information\n\n"
@@ -647,9 +651,13 @@ def export_to_markdown(
                 markdown_content += "#### 📚 Sources\n\n"
                 for source in sources:
                     # Make URLs clickable and add bullet points
-                    if source.startswith('http'):
+                    if source.startswith("http"):
                         # Extract domain for display
-                        domain = source.split('/')[2] if len(source.split('/')) > 2 else source
+                        domain = (
+                            source.split("/")[2]
+                            if len(source.split("/")) > 2
+                            else source
+                        )
                         markdown_content += f"- [{domain}]({source})\n"
                     else:
                         markdown_content += f"- {source}\n"
@@ -672,9 +680,9 @@ def export_to_markdown(
     # Add footer
     markdown_content += """## About This Report
 
-This fact check report was generated using the Fact Checker MCP Server, which uses multi-agent verification powered by CrewAI to analyze claims and verify information against reliable sources.
+This fact check report was generated using the Fact Checker Agent, which uses multi-agent verification powered by CrewAI to analyze claims and verify information against reliable sources.
 
-For more information or to run your own fact checks, see the [Fact Checker documentation](https://github.com/your-repo/fact-checker-mcp).
+For more information or to run your own fact checks, see the [Fact Checker documentation](https://github.com/Joopsnijder/fact-checker-mcp).
 """
 
     # Write to file with error handling for OneDrive/cloud sync issues
@@ -685,6 +693,7 @@ For more information or to run your own fact checks, see the [Fact Checker docum
         # Set proper file permissions to ensure it can be opened
         # Give read/write permissions to owner, read to group and others
         import stat
+
         os.chmod(output_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
 
         return str(output_file)
@@ -692,7 +701,9 @@ For more information or to run your own fact checks, see the [Fact Checker docum
     except (PermissionError, OSError) as e:
         # If we can't write to the original location (OneDrive sync issues),
         # try writing to user's Desktop as fallback
-        print(f"Warning: Could not write to {output_file} ({e}). Trying Desktop fallback...")
+        print(
+            f"Warning: Could not write to {output_file} ({e}). Trying Desktop fallback..."
+        )
 
         desktop_path = Path.home() / "Desktop"
         if original_filename:
@@ -700,7 +711,9 @@ For more information or to run your own fact checks, see the [Fact Checker docum
             base_name = original_path.stem
             fallback_file = desktop_path / f"fc_{base_name}.md"
         else:
-            fallback_file = desktop_path / f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            fallback_file = (
+                desktop_path / f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            )
 
         try:
             with open(fallback_file, "w", encoding="utf-8") as f:
@@ -708,13 +721,18 @@ For more information or to run your own fact checks, see the [Fact Checker docum
 
             # Set proper file permissions
             import stat
-            os.chmod(fallback_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+
+            os.chmod(
+                fallback_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
+            )
 
             print(f"Fact check report saved to Desktop: {fallback_file}")
             return str(fallback_file)
 
         except Exception as fallback_error:
-            print(f"Error: Could not write file to either location. Original error: {e}, Fallback error: {fallback_error}")
+            print(
+                f"Error: Could not write file to either location. Original error: {e}, Fallback error: {fallback_error}"
+            )
             raise e
 
 
@@ -765,7 +783,7 @@ def run_standalone_check(
             return crew_result
 
     # Always ensure we have the current timestamp (override any AI-generated placeholders)
-    report_data['timestamp'] = datetime.now().isoformat()
+    report_data["timestamp"] = datetime.now().isoformat()
 
     # Print rapport
     print("\n### FACT CHECK RAPPORT ###\n")
