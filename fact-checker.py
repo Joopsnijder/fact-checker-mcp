@@ -18,20 +18,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # CrewAI imports
-from crewai import Agent, Crew, Process, Task
-from langchain_openai import ChatOpenAI
+from crewai import Agent, Crew, Process, Task, LLM  # noqa: E402
+from langchain_openai import ChatOpenAI  # noqa: E402
 
-# Try to import CrewAI tools, with fallbacks for compatibility
-try:
-    from crewai_tools import ScrapeWebsiteTool, SerperDevTool, WebsiteSearchTool
-except ImportError:
-    # Fallback for older crewai_tools versions
-    SerperDevTool = None
-    WebsiteSearchTool = None
-    ScrapeWebsiteTool = None
+
+SerperDevTool = None
+WebsiteSearchTool = None
+ScrapeWebsiteTool = None
 
 # Pydantic voor data modellen
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field  # noqa: E402
 
 # ============================================
 # CONFIGURATIE
@@ -44,10 +40,11 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 # Configuration removed - no longer using MCP server
 
 # Initialize LLM voor CrewAI
-llm = ChatOpenAI(model="gpt-4", temperature=0.1, api_key=OPENAI_API_KEY)
+llm = ChatOpenAI(model="gpt-4", temperature=0.1, api_key=OPENAI_API_KEY, seed=42)
+# llm = LLM(model="ollama/gpt-oss:20b", base_url="http://localhost:11434", temperature=0.1)
 
 # Initialize Smart Search Tool met automatische fallback
-from smart_search_tool import SmartSearchTool, create_smart_search_tool
+from smart_search_tool import SmartSearchTool, create_smart_search_tool  # noqa: E402
 
 # Gebruik Smart Search Tool in plaats van SerperDevTool
 smart_search = SmartSearchTool(
@@ -170,14 +167,14 @@ def create_agents():
         role="Report Compiler",
         goal="Stel een helder en actionable fact-check rapport samen",
         backstory="""Je bent een expert in het schrijven van heldere fact-check
-        rapporten in normale, directe taal. 
-        
+        rapporten in normale, directe taal.
+
         TELLING REGELS VOOR STATISTIEKEN:
         - verified_claims = aantal claims met status "Geverifieerd en correct"
         - false_claims = aantal claims met status "Geverifieerd en onjuist" 
         - unverifiable_claims = aantal claims met status "Niet geverifieerd" of "Niet onderzocht"
         - total_claims = som van alle bovenstaande
-        
+
         BELANGRIJK: Je zorgt ervoor dat alle bronnen (URLs) uit voorgaande taken
         correct worden opgenomen in het finale rapport en dat de tellingen kloppen.""",
         verbose=True,
@@ -206,9 +203,9 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
     extract_claims_task = Task(
         description=f"""
         Analyseer de volgende tekst en identificeer ALLE verifieerbare claims:
-        
+
         {text}
-        
+
         Identificeer specifiek:
         1. Statistieken en getallen
         2. Historische feiten en datums  
@@ -216,7 +213,7 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         4. Wetenschappelijke claims
         5. Bedrijfsinformatie
         6. Geografische of demografische feiten
-        
+
         Focus alleen op verifieerbare feiten, geen meningen.
         """,
         agent=claim_extractor,
@@ -228,7 +225,7 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         description="""
         Onderzoek elke geïdentificeerde claim.
         Zoek naar betrouwbare bronnen en documenteer je bevindingen.
-        
+
         BELANGRIJK: Bewaar de EXACTE URLs van alle bronnen die je gebruikt.
         Voor elke claim, geef een lijst van alle URLs die je hebt geraadpleegd.
         """,
@@ -242,13 +239,13 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         description="""
         Verifieer elke claim op basis van het onderzoek.
         Bepaal de verificatiestatus en betrouwbaarheidsscore.
-        
+
         VERIFICATIE REGELS:
         1. Als de claim KLOPT met de bronnen: verification_status = "Geverifieerd en correct", confidence_score = 1.0
         2. Als de claim NIET KLOPT en je hebt correcte informatie: verification_status = "Geverifieerd en onjuist", confidence_score = 1.0, vul correct_information in
         3. Als je geen betrouwbare bronnen vindt: verification_status = "Niet geverifieerd", confidence_score = 0.0
         4. Als de claim niet fact-checkbaar is: verification_status = "Niet onderzocht", confidence_score = 0.0
-        
+
         BELANGRIJK: 
         - Voeg de EXACTE URLs van de bronnen toe die gebruikt zijn voor verificatie
         - Voor elke claim moet je de sources uit de research fase meenemen
@@ -257,6 +254,7 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         agent=verification_analyst,
         expected_output="Verificatiestatus, analyse en bronnen voor elke claim volgens de verificatie regels",
         context=[extract_claims_task, research_claims_task],
+        async_execution=True,
     )
 
     # Task 4: Compile Report
@@ -264,13 +262,13 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
         description="""
         Stel een professioneel fact-check rapport samen.
         Schrijf helder en direct, vermijd clichés.
-        
+
         TELLING INSTRUCTIES:
         - Tel ALLEEN claims met "Geverifieerd en correct" als verified_claims
         - Tel ALLEEN claims met "Geverifieerd en onjuist" als false_claims  
         - Tel claims met "Niet geverifieerd" of "Niet onderzocht" als unverifiable_claims
         - Controleer dat total_claims = verified_claims + false_claims + unverifiable_claims
-        
+
         BELANGRIJK: 
         - Zorg ervoor dat alle sources/bronnen uit de vorige taken correct worden opgenomen
         - Elke claim moet de bijbehorende URLs bevatten
@@ -478,41 +476,6 @@ def deep_fact_check_text(text: str):
         }
 
 
-# def export_to_markdown(
-#     report_data: Dict[str, Any], original_filename: str = None
-# ) -> str:
-#     """
-#     Krijg een samenvatting van alle fact checks.
-
-#     Returns:
-#         Samenvatting van fact check geschiedenis
-#     """
-#     if not fact_check_history:
-#         return json.dumps({"message": "Nog geen fact checks uitgevoerd", "total": 0})
-
-#     total_claims = sum(r.total_claims for r in fact_check_history)
-#     total_false = sum(r.false_claims for r in fact_check_history)
-
-#     summary = {
-#         "total_reports": len(fact_check_history),
-#         "total_claims_checked": total_claims,
-#         "total_false_claims": total_false,
-#         "accuracy_rate": f"{((total_claims - total_false) / total_claims * 100):.1f}%"
-#         if total_claims > 0
-#         else "N/A",
-#         "recent_checks": [
-#             {
-#                 "timestamp": r.timestamp,
-#                 "reliability": r.overall_reliability,
-#                 "claims": r.total_claims,
-#             }
-#             for r in fact_check_history[-5:]  # Laatste 5
-#         ],
-#     }
-
-#     return summary
-
-
 def export_report_to_markdown_by_id(report_id: int, base_filename: str = None):
     """
     Export een fact check rapport naar markdown formaat.
@@ -580,21 +543,18 @@ def export_to_markdown(
         output_file = output_dir / f"fc_{base_name}.md"
     else:
         # Use timestamp with fc prefix in current directory
-        output_file = Path(f"fc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
+        # Use timestamp in European format (day-month-year_hour-minute-second)
+        output_file = Path(f"fc_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.md")
 
     # Create markdown content
-    document_info = ""
-    if original_filename:
-        document_name = Path(original_filename).name
-        document_info = f"\n**Document:** {document_name}"
+    markdown_content = f"""# Fact Check Report
 
-    markdown_content = f"""# 📋 Fact Check Report
-
-**Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}{document_info}
+**Generated on:** {report_data.get("timestamp", datetime.now().isoformat())}\n\n
+**Document:** {original_filename}
 
 ---
 
-## 📊 Summary Statistics
+## Summary Statistics
 
 | Metric | Value |
 |--------|-------|
@@ -604,9 +564,6 @@ def export_to_markdown(
 | **❌ False Claims** | {report_data.get("false_claims", 0)} |
 | **❓ Unverifiable Claims** | {report_data.get("unverifiable_claims", 0)} |
 
-## 📝 Executive Summary
-
-{report_data.get("summary", "No summary available")}
 
 ## Detailed Verification Results
 
@@ -617,17 +574,26 @@ def export_to_markdown(
     if verifications:
         for i, verification in enumerate(verifications, 1):
             # Add claim header with better formatting
-            markdown_content += f"### Claim {i}: {verification.get('claim_type', 'General').title()}\n\n"
+            if "onjuist" in verification.get("verification_status", "").lower():
+                icon = "❌"
+            elif (
+                "niet geverifieerd"
+                in verification.get("verification_status", "").lower()
+            ):
+                icon = "❓"
+            else:
+                icon = "✅"
 
-            # Create a table for better readability
-            markdown_content += "| Field | Value |\n"
-            markdown_content += "|-------|-------|\n"
-            markdown_content += f"| **Original Claim** | {verification.get('original_claim', 'N/A')} |\n"
-            markdown_content += f"| **Verification Status** | {verification.get('verification_status', 'Unknown')} |\n"
-            markdown_content += f"| **Confidence Score** | {verification.get('confidence_score', 'N/A')} |\n\n"
+            markdown_content += f"### {icon} Claim {i}: {verification.get('claim_type', 'General').title()}\n\n"
+
+            markdown_content += (
+                f"**Original Claim**: {verification.get('original_claim', 'N/A')} \n\n"
+            )
+            markdown_content += f"**Verification Status**: {verification.get('verification_status', 'Unknown')} \n\n"
+            markdown_content += f"**Confidence Score**: {verification.get('confidence_score', 'N/A')} \n\n"
 
             # Add explanation as a separate section with better formatting
-            markdown_content += "#### 📊 Analysis\n\n"
+            markdown_content += "#### Analysis\n\n"
             markdown_content += (
                 f"{verification.get('explanation', 'No explanation provided')}\n\n"
             )
@@ -637,9 +603,7 @@ def export_to_markdown(
                 verification_status = verification.get("verification_status", "")
                 if "onjuist" in verification_status.lower():
                     # For false claims, show what the correct information should be
-                    markdown_content += (
-                        "#### ❌ Correct Information (Original Claim is False)\n\n"
-                    )
+                    markdown_content += "#### ❌ False Claim\n\n"
                 else:
                     # For other cases where we have additional correct information
                     markdown_content += "#### ✅ Additional Information\n\n"
