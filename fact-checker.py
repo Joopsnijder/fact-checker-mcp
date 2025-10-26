@@ -559,43 +559,23 @@ For more information or to run your own fact checks, see the [Fact Checker docum
 def run_standalone_check(
     text: str, input_filename: str = None, export_markdown: bool = False
 ):
-    """Run als standalone CrewAI applicatie"""
+    """Run als standalone fact check applicatie"""
     print("\n" + "=" * 50)
     print("FACT CHECKER - STANDALONE MODE")
     print("=" * 50 + "\n")
 
-    crew_result = run_fact_check_crew(text)
+    # Run fact check (returns FactCheckReport Pydantic object)
+    report = run_fact_check_crew(text)
 
-    # Extract the actual report from CrewOutput
-    if hasattr(crew_result, "raw"):
-        report_data = crew_result.raw
+    # Convert Pydantic model to dict
+    if hasattr(report, "model_dump"):
+        report_data = report.model_dump()
+    elif hasattr(report, "dict"):
+        report_data = report.dict()
     else:
-        # Fallback: try to parse JSON from crew_result string representation
-        try:
-            import json
-
-            report_data = json.loads(str(crew_result))
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"Could not parse crew result: {e}")
-            return crew_result
-
-    # Ensure report_data is a dict, not a string
-    if isinstance(report_data, str):
-        try:
-            import json
-
-            report_data = json.loads(report_data)
-        except (json.JSONDecodeError, ValueError):
-            print(
-                f"Error: Could not parse report data as JSON. Got: {type(report_data)}"
-            )
-            print(
-                "Raw data:",
-                str(report_data)[:200] + "..."
-                if len(str(report_data)) > 200
-                else str(report_data),
-            )
-            return crew_result
+        # Fallback for unexpected types
+        print(f"Warning: Unexpected report type: {type(report)}")
+        report_data = {"error": "Could not parse report", "raw": str(report)}
 
     # Always ensure we have the current timestamp (override any AI-generated placeholders)
     report_data["timestamp"] = datetime.now().isoformat()
@@ -632,7 +612,7 @@ def run_standalone_check(
         markdown_output = export_to_markdown(report_data, input_filename)
         print(f"Markdown rapport opgeslagen als: {markdown_output}")
 
-    return crew_result
+    return report
 
 
 if __name__ == "__main__":
