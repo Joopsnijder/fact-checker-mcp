@@ -84,10 +84,12 @@ def test_portkey_metadata():
     from portkey_client import create_metadata
 
     metadata = create_metadata(agent="test_agent", phase="test_phase", iteration=1)
+    assert metadata["project"] == "fact-checker-mcp"
     assert metadata["agent"] == "test_agent"
     assert metadata["phase"] == "test_phase"
     assert metadata["iteration"] == 1
-    assert "user" in metadata
+    assert metadata["user"] is not None
+    assert metadata["environment"] is not None
 
 
 @pytest.mark.asyncio

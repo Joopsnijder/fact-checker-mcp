@@ -322,7 +322,13 @@ def create_metadata(agent: str, phase: str, **kwargs) -> dict:
         ...     iteration=1
         ... )
     """
-    metadata = {"agent": agent, "phase": phase, "user": os.getenv("USER", "unknown")}
+    metadata = {
+        "project": "fact-checker-mcp",  # Identifies this application
+        "agent": agent,  # Specific agent (claim_extractor, research_specialist, etc.)
+        "phase": phase,  # Current phase (extract, research, verify, compile)
+        "user": os.getenv("USER", "unknown"),
+        "environment": os.getenv("ENVIRONMENT", "development"),
+    }
 
     # Add any additional metadata
     metadata.update(kwargs)
