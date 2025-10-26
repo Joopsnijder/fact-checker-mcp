@@ -1,0 +1,58 @@
+{
+  "original_text": "Tesla heeft meer dan 100.000 werknemers wereldwijd in 2024",
+  "total_claims": 3,
+  "verified_claims": 3,
+  "false_claims": 0,
+  "unverifiable_claims": 0,
+  "overall_reliability": "Zeer betrouwbaar - Alle claims zijn geverifieerd en correct",
+  "verifications": [
+    {
+      "original_claim": "Tesla heeft meer dan 100.000 werknemers",
+      "claim_type": "Kwantitatieve bedrijfsstatistiek",
+      "verification_status": "Geverifieerd en correct",
+      "confidence_score": 1.0,
+      "correct_information": null,
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1318605/000162828025003063/tsla-20241231.htm",
+        "https://www.tesla.com/about",
+        "https://www.macrotrends.net/stocks/charts/TSLA/tesla/number-of-employees",
+        "https://stockanalysis.com/stocks/tsla/employees/",
+        "https://en.wikipedia.org/wiki/Tesla,_Inc."
+      ],
+      "explanation": "De claim is volledig correct. Volgens de officiële SEC Filing 10-K van Tesla had het bedrijf per 31 december 2024 exact 125.665 werknemers wereldwijd. Dit is aanzienlijk meer dan de geclaimde 100.000 werknemers. De SEC Filing is een wettelijk verplichte rapportage en vormt de meest betrouwbare bron voor deze informatie."
+    },
+    {
+      "original_claim": "Het personeelsbestand is wereldwijd verspreid",
+      "claim_type": "Geografische bedrijfsinformatie",
+      "verification_status": "Geverifieerd en correct",
+      "confidence_score": 1.0,
+      "correct_information": null,
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1318605/000162828025003063/tsla-20241231.htm",
+        "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+        "https://www.zippia.com/tesla-careers-34/locations/",
+        "https://en.wikipedia.org/wiki/List_of_Tesla_factories",
+        "https://www.visualcapitalist.com/mapped-where-tesla-and-byd-make-their-cars/",
+        "https://www.clay.com/dossier/tesla-headquarters-office-locations"
+      ],
+      "explanation": "De claim is volledig correct. Tesla heeft 110 kantoorlocaties verspreid over 39 landen wereldwijd. De SEC Filing bevestigt expliciet dat het om 'worldwide' werknemers gaat. Belangrijke productielocaties bevinden zich in de Verenigde Staten (Texas, Californië, Nevada), China (Shanghai) en Duitsland (Berlijn)."
+    },
+    {
+      "original_claim": "Deze cijfers zijn geldig voor/in het jaar 2024",
+      "claim_type": "Temporele informatie",
+      "verification_status": "Geverifieerd en correct",
+      "confidence_score": 1.0,
+      "correct_information": null,
+      "sources": [
+        "https://www.sec.gov/Archives/edgar/data/1318605/000162828025003063/tsla-20241231.htm",
+        "https://ir.tesla.com/press-release/tesla-releases-fourth-quarter-and-full-year-2024-financial-results",
+        "https://www.macrotrends.net/stocks/charts/TSLA/tesla/number-of-employees",
+        "https://stockanalysis.com/stocks/tsla/employees/",
+        "https://seo.ai/blog/how-many-people-work-at-tesla"
+      ],
+      "explanation": "De claim is volledig correct. De officiële SEC Filing van Tesla geeft expliciet aan dat het werknemersaantal van 125.665 geldig is per 31 december 2024. Dit is de meest recente officiële data beschikbaar. Ter context: Tesla heeft in 2024 een personeelsreductie van 10,54% doorgevoerd, waarbij het aantal werknemers daalde van 140.473 (eind 2023) naar 125.665 (eind 2024)."
+    }
+  ],
+  "summary": "Alle drie de claims over Tesla's werknemersaantallen in 2024 zijn volledig correct en geverifieerd door meerdere betrouwbare bronnen. Het exacte aantal werknemers per 31 december 2024 is 125.665, verspreid over 110 kantoorlocaties in 39 landen wereldwijd. De primaire bron is de officiële SEC Filing 10-K, een wettelijk verplichte rapportage die de hoogste betrouwbaarheid biedt. Tesla heeft in 2024 een significante personeelsreductie doorgevoerd van 10,54% (14.808 werknemers), waarbij het personeelsbestand daalde van 140.473 (eind 2023) naar 125.665 (eind 2024). Deze reductie werd in april 2024 aangekondigd als onderdeel van een reorganisatie waarbij 10% van de werknemers werd ontslagen. Alle gebruikte bronnen zijn van hoge kwaliteit, met de nadruk op officiële bedrijfsdocumentatie en gevestigde financiële data providers.",
+  "timestamp": "2025-10-25T10:58:10.004753"
+}

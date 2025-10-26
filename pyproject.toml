@@ -13,34 +13,28 @@ dependencies = [
     # Core MCP dependencies
     "fastmcp>=2.11.0",
     "mcp>=1.12.0",
-    
-    # CrewAI and AI dependencies - minimal set for now
-    "crewai>=0.157.0",
-    "langchain>=0.3.0",
-    "langchain-openai>=0.3.30",
-    "langchain-core>=0.3.74",
-    
-    # LLM and OpenAI 
-    "openai>=1.99.0",
+
+    # LLM and AI dependencies
+    "anthropic>=0.40.0",
+    "portkey-ai>=1.0.0",
+    "openai>=1.99.0",  # Kept for backward compatibility
     "tiktoken>=0.11.0",
-    
-    # Web scraping and search
+
+    # Search dependencies
+    "multi-search-api>=1.0.0",
     "beautifulsoup4>=4.13.0",
     "httpx>=0.28.0",
     "requests>=2.32.0",
-    
-    # Data models and validation  
+
+    # Data models and validation
     "pydantic>=2.11.0",
     "python-dotenv>=1.1.0",
-    
-    # Vector database and memory
-    "chromadb>=1.0.0",
-    
+
     # Utility libraries
     "rich>=14.0.0",
     "typer>=0.15.0",
     "tenacity>=9.1.0",
-    
+
     # Web UI
     "gradio>=4.44.0",
 ]

@@ -5,12 +5,9 @@ Auteur: Joop Snijder
 Tests om te controleren of markdown export correct werkt voor fact check rapporten.
 """
 
-import asyncio
 import importlib.util
-import json
 import os
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -76,7 +73,7 @@ def sample_report_data():
             {
                 "original_claim": "Tesla was founded in 2003",
                 "claim_type": "Historical",
-                "verification_status": "Verified", 
+                "verification_status": "Verified",
                 "confidence_score": 0.99,
                 "correct_information": "Tesla was founded in July 2003",
                 "sources": [
@@ -116,18 +113,18 @@ class TestMarkdownExport:
         # Change to temp directory
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             # Test export with original filename
             filename = export_to_markdown(sample_report_data, "test_document.txt")
-            
+
             assert filename == "fc_test_document.md"
             assert Path(filename).exists()
-            
+
             # Read and verify content
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # Check essential sections
             assert "# Fact Check Report" in content
             assert "## Summary" in content
@@ -139,7 +136,7 @@ class TestMarkdownExport:
             assert "### Claim 2: Historical" in content
             assert "## Original Text" in content
             assert "## About This Report" in content
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -147,22 +144,22 @@ class TestMarkdownExport:
         """Test markdown export zonder specifieke bestandsnaam"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             # Test export without original filename
             filename = export_to_markdown(sample_report_data)
-            
+
             assert filename.startswith("fc_")
             assert filename.endswith(".md")
             assert Path(filename).exists()
-            
+
             # Verify content structure
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             assert "# Fact Check Report" in content
             assert "Overall Reliability:** High" in content
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -170,22 +167,22 @@ class TestMarkdownExport:
         """Test markdown export met minimale report data"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             filename = export_to_markdown(minimal_report_data, "minimal_test.txt")
-            
+
             assert filename == "fc_minimal_test.md"
             assert Path(filename).exists()
-            
+
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # Check that it handles empty verifications gracefully
             assert "# Fact Check Report" in content
             assert "Overall Reliability:** Low" in content
             assert "No detailed verifications available" in content
             assert "Simple test claim" in content
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -193,30 +190,30 @@ class TestMarkdownExport:
         """Test de structuur van de gegenereerde markdown"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             filename = export_to_markdown(sample_report_data, "structure_test.txt")
-            
+
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             lines = content.split('\n')
-            
+
             # Check specific markdown formatting
             assert lines[0] == "# Fact Check Report"
-            
+
             # Check that sources are formatted as bullet points
             source_lines = [line for line in lines if line.startswith("- https://")]
             assert len(source_lines) >= 3  # At least 3 sources in our sample data
-            
+
             # Check that claims are properly numbered
             assert "### Claim 1:" in content
             assert "### Claim 2:" in content
-            
+
             # Check confidence scores are included
             assert "**Confidence Score:** 0.95" in content
             assert "**Confidence Score:** 0.99" in content
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -224,7 +221,7 @@ class TestMarkdownExport:
         """Test hoe markdown export omgaat met ontbrekende velden"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             # Create report data with missing fields
             incomplete_data = {
@@ -239,18 +236,18 @@ class TestMarkdownExport:
                     }
                 ]
             }
-            
+
             filename = export_to_markdown(incomplete_data, "incomplete_test.txt")
-            
+
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # Should handle missing fields gracefully
             assert "# Fact Check Report" in content
             assert "Overall Reliability:** Unknown" in content
             assert "No summary available" in content
             assert "**Confidence Score:** N/A" in content
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -258,21 +255,21 @@ class TestMarkdownExport:
         """Test export by report ID functionality"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             # Add a report to history
             from fact_checker import FactCheckReport, export_report_to_markdown_by_id
             report = FactCheckReport.model_validate(sample_report_data)
             fact_check_history.clear()  # Start fresh
             fact_check_history.append(report)
-            
+
             # Test the export function
             result = export_report_to_markdown_by_id(0, "id_test")
-            
+
             assert result["status"] == "success"
             assert "fc_id_test.md" in result["filename"]
             assert Path(result["filename"]).exists()
-            
+
         finally:
             os.chdir(original_cwd)
             fact_check_history.clear()  # Clean up
@@ -280,10 +277,10 @@ class TestMarkdownExport:
     def test_export_by_id_invalid_id(self, fact_check_history):
         """Test export function with invalid report ID"""
         fact_check_history.clear()  # Ensure empty history
-        
+
         from fact_checker import export_report_to_markdown_by_id
         result = export_report_to_markdown_by_id(999, "test")
-        
+
         assert result["status"] == "error"
         assert "not found" in result["message"]
 
@@ -291,7 +288,7 @@ class TestMarkdownExport:
         """Test markdown export met speciale karakters"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             special_data = {
                 "original_text": "Tesla heeft €50 miljard omzet & 100% groei!",
@@ -313,17 +310,17 @@ class TestMarkdownExport:
                 "summary": "Test met speciale karakters: €, &, %, <, >",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             filename = export_to_markdown(special_data, "special_chars.txt")
-            
+
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # Special characters should be preserved
             assert "€50 miljard" in content
             assert "100% groei" in content
             assert "&" in content
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -331,7 +328,7 @@ class TestMarkdownExport:
         """Test export van groot rapport met veel claims"""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
-        
+
         try:
             # Create large report with many claims
             large_data = {
@@ -355,21 +352,21 @@ class TestMarkdownExport:
                 "summary": "Large report with multiple claims for testing purposes.",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             filename = export_to_markdown(large_data, "large_report.txt")
-            
+
             with open(filename, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # Check all claims are included
             for i in range(1, 6):
                 assert f"### Claim {i}:" in content
                 assert f"Claim number {i}" in content
-            
+
             # Check statistics
             assert "**Total Claims:** 5" in content
             assert "**Verified Claims:** 3" in content
             assert "**False Claims:** 1" in content
-            
+
         finally:
             os.chdir(original_cwd)

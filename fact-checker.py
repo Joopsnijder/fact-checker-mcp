@@ -1,314 +1,149 @@
 """
-Fact Checker Hybrid - CrewAI Agent
+Fact Checker - Custom Agent Loop Implementation
 Auteur: Joop Snijder
-Versie: 2.0
+Versie: 3.0
 
-Deze implementatie werkt als CrewAI multi-agent systeem voor complexe fact-checking
+Deze implementatie gebruikt een custom agent loop voor volledige controle
+over parallel execution en observability met Portkey.
 """
 
+import asyncio
 import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
+from agent_loop import AgentOrchestrator, ExecutionContext, create_task
+from agents import (
+    ClaimExtractorAgent,
+    FactCheckReport,
+    ReportCompilerAgent,
+    ResearchSpecialistAgent,
+    VerificationAnalystAgent,
+)
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field  # noqa: F401
 
 # Load environment variables from .env file
 load_dotenv()
-
-# CrewAI imports
-from crewai import Agent, Crew, Process, Task, LLM  # noqa: E402
-from langchain_openai import ChatOpenAI  # noqa: E402
-
-
-SerperDevTool = None
-WebsiteSearchTool = None
-ScrapeWebsiteTool = None
-
-# Pydantic voor data modellen
-from pydantic import BaseModel, Field  # noqa: E402
 
 # ============================================
 # CONFIGURATIE
 # ============================================
 
 # API Keys (gebruik environment variables)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
+BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
 
-# Configuration removed - no longer using MCP server
+# Portkey configuration (optional - will fallback to standard Anthropic)
+PORTKEY_API_KEY = os.getenv("PORTKEY_API_KEY", "")
+PORTKEY_PROVIDER_SLUG = os.getenv("PORTKEY_PROVIDER_SLUG", "@aitoday-anthropic")
+PORTKEY_MODEL_NAME = os.getenv("PORTKEY_MODEL_NAME", "claude-sonnet-4-5-20250929")
 
-# Initialize LLM voor CrewAI
-llm = ChatOpenAI(model="gpt-4", temperature=0.1, api_key=OPENAI_API_KEY, seed=42)
-# llm = LLM(model="ollama/gpt-oss:20b", base_url="http://localhost:11434", temperature=0.1)
-
-# Initialize Smart Search Tool met automatische fallback
-from smart_search_tool import SmartSearchTool, create_smart_search_tool  # noqa: E402
-
-# Gebruik Smart Search Tool in plaats van SerperDevTool
-smart_search = SmartSearchTool(
-    serper_api_key=SERPER_API_KEY, brave_api_key=os.getenv("BRAVE_API_KEY", "")
-)
-search_tool = create_smart_search_tool()
-
-# Initialize other tools with fallback handling
-if ScrapeWebsiteTool:
-    web_scraper = ScrapeWebsiteTool()
-else:
-    web_scraper = None
-
-if WebsiteSearchTool:
-    website_search = WebsiteSearchTool()
-else:
-    website_search = None
+# Note: LLM client is now initialized in agents.py via portkey_client
+# Search tool is now initialized in agents.py via search_wrapper
 
 
 # ============================================
-# DATA MODELLEN (Gedeeld tussen CrewAI en MCP)
+# DATA MODELLEN
 # ============================================
-
-
-class ClaimVerification(BaseModel):
-    """Model voor individuele claim verificatie"""
-
-    original_claim: str = Field(description="De originele claim uit de tekst")
-    claim_type: str = Field(description="Type: statistiek, feit, quote, datum, etc.")
-    verification_status: str = Field(
-        description="Status: Geverifieerd, Onwaar, Deels waar, Onverifieerbaar"
-    )
-    confidence_score: float = Field(description="Betrouwbaarheidsscore 0-1")
-    correct_information: Optional[str] = Field(
-        description="De juiste informatie indien beschikbaar"
-    )
-    sources: List[str] = Field(description="Bronnen gebruikt voor verificatie")
-    explanation: str = Field(description="Uitleg van de verificatie")
-
-
-class FactCheckReport(BaseModel):
-    """Complete fact check rapport"""
-
-    original_text: str = Field(description="De originele ingevoerde tekst")
-    total_claims: int = Field(description="Totaal aantal geïdentificeerde claims")
-    verified_claims: int = Field(description="Aantal geverifieerde claims")
-    false_claims: int = Field(description="Aantal onjuiste claims")
-    unverifiable_claims: int = Field(description="Aantal niet-verifieerbare claims")
-    overall_reliability: str = Field(
-        description="Algemene betrouwbaarheid: Hoog, Gemiddeld, Laag"
-    )
-    verifications: List[ClaimVerification] = Field(
-        description="Lijst van alle verificaties"
-    )
-    summary: str = Field(description="Samenvatting van bevindingen")
-    timestamp: str = Field(description="Tijdstip van verificatie")
+# Note: ClaimVerification and FactCheckReport are now imported from agents.py
+# They are re-exported here for backward compatibility
 
 
 # ============================================
-# CREWAI AGENTS
+# CUSTOM AGENT LOOP FACT CHECKING
 # ============================================
 
 
-def create_agents():
-    """Creëer en return alle agents"""
+async def run_custom_agent_loop(text: str) -> FactCheckReport:
+    """
+    Run de custom agent loop voor fact checking.
 
-    claim_extractor = Agent(
-        role="Claim Extractor",
-        goal="Identificeer alle verifieerbare claims, statistieken en feitelijke uitspraken in de tekst",
-        backstory="""Je bent een expert in het analyseren van teksten en het identificeren
-        van claims die geverifieerd kunnen worden. Je hebt jarenlange ervaring met het
-        onderscheiden van meningen van feiten.""",
-        verbose=True,
-        allow_delegation=False,
-        llm=llm,
-        max_iter=3,
-    )
+    Dit gebruikt onze eigen orchestration zonder CrewAI dependency.
+    Agents kunnen parallel uitvoeren waar mogelijk.
 
-    research_specialist = Agent(
-        role="Research Specialist",
-        goal="Zoek betrouwbare bronnen om claims te verifiëren",
-        backstory="""Je bent een onderzoeksexpert met toegang tot het internet.
-        Je specialiteit is het vinden van autoritatieve bronnen.""",
-        verbose=True,
-        allow_delegation=False,
-        tools=[
-            tool
-            for tool in [search_tool, web_scraper, website_search]
-            if tool is not None
-        ],
-        llm=llm,
-        max_iter=5,
-    )
+    Args:
+        text: De te controleren tekst
 
-    verification_analyst = Agent(
-        role="Fact Verification Analyst",
-        goal="Vergelijk claims met gevonden bronnen en bepaal waarheidsgehalte",
-        backstory="""Je bent een analyticus gespecialiseerd in fact-checking.
-        Je maakt genuanceerde oordelen over de waarheid van claims.
-        
-        BELANGRIJKE REGELS VOOR VERIFICATION_STATUS:
-        - Gebruik "Geverifieerd en correct" als de claim klopt met de bronnen
-        - Gebruik "Geverifieerd en onjuist" als de claim NIET klopt met de bronnen EN je hebt correcte informatie gevonden
-        - Gebruik "Niet geverifieerd" alleen als je geen betrouwbare bronnen kon vinden
-        - Gebruik "Niet onderzocht" als de claim niet relevant is voor fact-checking
-        
-        Als je correcte informatie vindt die de originele claim tegenspreekt, moet je:
-        1. verification_status instellen op "Geverifieerd en onjuist"
-        2. confidence_score instellen op 1.0
-        3. correct_information vullen met de juiste informatie
-        
-        BELANGRIJK: Je neemt altijd de exacte URLs van bronnen over uit het onderzoek.""",
-        verbose=True,
-        allow_delegation=False,
-        llm=llm,
-        max_iter=3,
-    )
+    Returns:
+        FactCheckReport object met alle verificaties
+    """
+    # Initialize agents
+    claim_extractor = ClaimExtractorAgent()
+    research_specialist = ResearchSpecialistAgent()
+    verification_analyst = VerificationAnalystAgent()
+    report_compiler = ReportCompilerAgent()
 
-    report_compiler = Agent(
-        role="Report Compiler",
-        goal="Stel een helder en actionable fact-check rapport samen",
-        backstory="""Je bent een expert in het schrijven van heldere fact-check
-        rapporten in normale, directe taal.
+    # Create execution context
+    context = ExecutionContext(original_text=text)
+    context.metadata["iteration"] = 1
 
-        TELLING REGELS VOOR STATISTIEKEN:
-        - verified_claims = aantal claims met status "Geverifieerd en correct"
-        - false_claims = aantal claims met status "Geverifieerd en onjuist" 
-        - unverifiable_claims = aantal claims met status "Niet geverifieerd" of "Niet onderzocht"
-        - total_claims = som van alle bovenstaande
+    # Define tasks with dependencies
+    tasks = [
+        create_task(
+            task_id="extract",
+            description=f"Extract all verifiable claims from text:\n\n{text}",
+            agent=claim_extractor,
+            expected_output="List of identified claims with types",
+        ),
+        create_task(
+            task_id="research",
+            description="Research each claim using web search",
+            agent=research_specialist,
+            depends_on=["extract"],
+            async_execution=False,  # Sequential for now to avoid rate limits
+            expected_output="Research results with sources for each claim",
+        ),
+        create_task(
+            task_id="verify",
+            description="Verify each claim against research findings",
+            agent=verification_analyst,
+            depends_on=["extract", "research"],
+            async_execution=False,
+            expected_output="Verification status and analysis for each claim",
+        ),
+        create_task(
+            task_id="compile",
+            description="Compile final fact-check report",
+            agent=report_compiler,
+            depends_on=["verify"],
+            expected_output="Complete FactCheckReport",
+        ),
+    ]
 
-        BELANGRIJK: Je zorgt ervoor dat alle bronnen (URLs) uit voorgaande taken
-        correct worden opgenomen in het finale rapport en dat de tellingen kloppen.""",
-        verbose=True,
-        allow_delegation=False,
-        llm=llm,
-        max_iter=2,
-    )
+    # Run orchestrator
+    orchestrator = AgentOrchestrator(verbose=True)
+    result = await orchestrator.run(tasks, context)
 
-    return claim_extractor, research_specialist, verification_analyst, report_compiler
+    if not result.success:
+        raise RuntimeError(f"Fact checking failed: {result.error}")
 
+    # Get report from result
+    report = result.report
 
-# ============================================
-# CREWAI FACT CHECKING LOGICA
-# ============================================
+    # Ensure timestamp is current
+    if hasattr(report, "timestamp"):
+        report.timestamp = datetime.now().isoformat()
+
+    return report
 
 
 def run_fact_check_crew(text: str) -> FactCheckReport:
     """
-    Run de complete CrewAI fact checking crew
+    Backward compatible wrapper for async implementation.
+
+    This function name is kept for compatibility with existing code.
+
+    Args:
+        text: De te controleren tekst
+
+    Returns:
+        FactCheckReport object
     """
-    claim_extractor, research_specialist, verification_analyst, report_compiler = (
-        create_agents()
-    )
-
-    # Task 1: Extract Claims
-    extract_claims_task = Task(
-        description=f"""
-        Analyseer de volgende tekst en identificeer ALLE verifieerbare claims:
-
-        {text}
-
-        Identificeer specifiek:
-        1. Statistieken en getallen
-        2. Historische feiten en datums  
-        3. Quotes toegeschreven aan personen
-        4. Wetenschappelijke claims
-        5. Bedrijfsinformatie
-        6. Geografische of demografische feiten
-
-        Focus alleen op verifieerbare feiten, geen meningen.
-        """,
-        agent=claim_extractor,
-        expected_output="Een gestructureerde lijst van alle verifieerbare claims",
-    )
-
-    # Task 2: Research Claims
-    research_claims_task = Task(
-        description="""
-        Onderzoek elke geïdentificeerde claim.
-        Zoek naar betrouwbare bronnen en documenteer je bevindingen.
-
-        BELANGRIJK: Bewaar de EXACTE URLs van alle bronnen die je gebruikt.
-        Voor elke claim, geef een lijst van alle URLs die je hebt geraadpleegd.
-        """,
-        agent=research_specialist,
-        expected_output="Onderzoeksresultaten voor elke claim met EXACTE URLs van alle bronnen",
-        context=[extract_claims_task],
-    )
-
-    # Task 3: Verify Claims
-    verify_claims_task = Task(
-        description="""
-        Verifieer elke claim op basis van het onderzoek.
-        Bepaal de verificatiestatus en betrouwbaarheidsscore.
-
-        VERIFICATIE REGELS:
-        1. Als de claim KLOPT met de bronnen: verification_status = "Geverifieerd en correct", confidence_score = 1.0
-        2. Als de claim NIET KLOPT en je hebt correcte informatie: verification_status = "Geverifieerd en onjuist", confidence_score = 1.0, vul correct_information in
-        3. Als je geen betrouwbare bronnen vindt: verification_status = "Niet geverifieerd", confidence_score = 0.0
-        4. Als de claim niet fact-checkbaar is: verification_status = "Niet onderzocht", confidence_score = 0.0
-
-        BELANGRIJK: 
-        - Voeg de EXACTE URLs van de bronnen toe die gebruikt zijn voor verificatie
-        - Voor elke claim moet je de sources uit de research fase meenemen
-        - Als je correcte informatie hebt die de claim tegenspreekt, markeer dit als "Geverifieerd en onjuist"
-        """,
-        agent=verification_analyst,
-        expected_output="Verificatiestatus, analyse en bronnen voor elke claim volgens de verificatie regels",
-        context=[extract_claims_task, research_claims_task],
-        async_execution=True,
-    )
-
-    # Task 4: Compile Report
-    compile_report_task = Task(
-        description="""
-        Stel een professioneel fact-check rapport samen.
-        Schrijf helder en direct, vermijd clichés.
-
-        TELLING INSTRUCTIES:
-        - Tel ALLEEN claims met "Geverifieerd en correct" als verified_claims
-        - Tel ALLEEN claims met "Geverifieerd en onjuist" als false_claims  
-        - Tel claims met "Niet geverifieerd" of "Niet onderzocht" als unverifiable_claims
-        - Controleer dat total_claims = verified_claims + false_claims + unverifiable_claims
-
-        BELANGRIJK: 
-        - Zorg ervoor dat alle sources/bronnen uit de vorige taken correct worden opgenomen
-        - Elke claim moet de bijbehorende URLs bevatten
-        - De tellingen in de statistieken moeten exact kloppen met de verification_status waarden
-        """,
-        agent=report_compiler,
-        expected_output="Een compleet fact-check rapport met correcte tellingen en alle bronnen",
-        context=[extract_claims_task, research_claims_task, verify_claims_task],
-        output_pydantic=FactCheckReport,
-    )
-
-    # Creëer en run crew
-    crew = Crew(
-        agents=[
-            claim_extractor,
-            research_specialist,
-            verification_analyst,
-            report_compiler,
-        ],
-        tasks=[
-            extract_claims_task,
-            research_claims_task,
-            verify_claims_task,
-            compile_report_task,
-        ],
-        process=Process.sequential,
-        verbose=True,
-        memory=True,
-        cache=True,
-    )
-
-    result = crew.kickoff()
-
-    # Ensure the timestamp is always current (override any AI-generated placeholder)
-    if hasattr(result, "timestamp"):
-        result.timestamp = datetime.now().isoformat()
-    elif hasattr(result, "raw") and isinstance(result.raw, dict):
-        result.raw["timestamp"] = datetime.now().isoformat()
-
-    return result
+    return asyncio.run(run_custom_agent_loop(text))
 
 
 # ============================================
@@ -318,12 +153,23 @@ def run_fact_check_crew(text: str) -> FactCheckReport:
 
 async def quick_fact_check(text: str) -> Dict[str, Any]:
     """
-    Snelle fact check zonder full CrewAI crew
-    Gebruikt alleen web search voor directe verificatie
+    Snelle fact check zonder full agent loop.
+    Gebruikt alleen web search voor directe verificatie.
+
+    Args:
+        text: Te controleren tekst (max 500 karakters)
+
+    Returns:
+        Dict met quick check resultaten
     """
+    from search_wrapper import create_search_tool
+
     try:
-        # Gebruik search tool direct voor snelle checks
-        search_results = search_tool.run(f"fact check verify {text[:100]}")
+        # Initialize search tool
+        search = create_search_tool()
+
+        # Perform quick search
+        search_results = search.run(f"fact check verify {text[:100]}")
 
         # Basis analyse
         return {
@@ -422,6 +268,8 @@ def quick_verify_text(text: str):
     Returns:
         Quick verification result
     """
+    from search_wrapper import create_search_tool
+
     if len(text) > 500:
         return {
             "error": "Text te lang voor quick verify. Gebruik deep_fact_check voor langere teksten."
@@ -429,8 +277,11 @@ def quick_verify_text(text: str):
 
     # Simplified version without async
     try:
-        # Gebruik search tool direct voor snelle checks
-        search_results = search_tool.run(f"fact check verify {text[:100]}")
+        # Initialize search tool
+        search = create_search_tool()
+
+        # Perform quick search
+        search_results = search.run(f"fact check verify {text[:100]}")
 
         # Basis analyse
         return {
@@ -655,10 +506,22 @@ For more information or to run your own fact checks, see the [Fact Checker docum
             f.write(markdown_content)
 
         # Set proper file permissions to ensure it can be opened
-        # Give read/write permissions to owner, read to group and others
+        # Give read/write permissions to owner, group, and others (0o644)
         import stat
+        import subprocess
 
         os.chmod(output_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+
+        # Remove ALL macOS extended attributes that can cause permission issues
+        # This includes quarantine, provenance, and other attributes
+        try:
+            subprocess.run(
+                ["xattr", "-c", str(output_file)],
+                capture_output=True,
+                check=False,
+            )
+        except Exception:
+            pass  # Ignore if xattr removal fails
 
         return str(output_file)
 
@@ -685,10 +548,21 @@ For more information or to run your own fact checks, see the [Fact Checker docum
 
             # Set proper file permissions
             import stat
+            import subprocess
 
             os.chmod(
                 fallback_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
             )
+
+            # Remove ALL macOS extended attributes
+            try:
+                subprocess.run(
+                    ["xattr", "-c", str(fallback_file)],
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass
 
             print(f"Fact check report saved to Desktop: {fallback_file}")
             return str(fallback_file)
@@ -697,7 +571,7 @@ For more information or to run your own fact checks, see the [Fact Checker docum
             print(
                 f"Error: Could not write file to either location. Original error: {e}, Fallback error: {fallback_error}"
             )
-            raise e
+            raise e from fallback_error
 
 
 # ============================================
@@ -708,43 +582,23 @@ For more information or to run your own fact checks, see the [Fact Checker docum
 def run_standalone_check(
     text: str, input_filename: str = None, export_markdown: bool = False
 ):
-    """Run als standalone CrewAI applicatie"""
+    """Run als standalone fact check applicatie"""
     print("\n" + "=" * 50)
     print("FACT CHECKER - STANDALONE MODE")
     print("=" * 50 + "\n")
 
-    crew_result = run_fact_check_crew(text)
+    # Run fact check (returns FactCheckReport Pydantic object)
+    report = run_fact_check_crew(text)
 
-    # Extract the actual report from CrewOutput
-    if hasattr(crew_result, "raw"):
-        report_data = crew_result.raw
+    # Convert Pydantic model to dict
+    if hasattr(report, "model_dump"):
+        report_data = report.model_dump()
+    elif hasattr(report, "dict"):
+        report_data = report.dict()
     else:
-        # Fallback: try to parse JSON from crew_result string representation
-        try:
-            import json
-
-            report_data = json.loads(str(crew_result))
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"Could not parse crew result: {e}")
-            return crew_result
-
-    # Ensure report_data is a dict, not a string
-    if isinstance(report_data, str):
-        try:
-            import json
-
-            report_data = json.loads(report_data)
-        except (json.JSONDecodeError, ValueError):
-            print(
-                f"Error: Could not parse report data as JSON. Got: {type(report_data)}"
-            )
-            print(
-                "Raw data:",
-                str(report_data)[:200] + "..."
-                if len(str(report_data)) > 200
-                else str(report_data),
-            )
-            return crew_result
+        # Fallback for unexpected types
+        print(f"Warning: Unexpected report type: {type(report)}")
+        report_data = {"error": "Could not parse report", "raw": str(report)}
 
     # Always ensure we have the current timestamp (override any AI-generated placeholders)
     report_data["timestamp"] = datetime.now().isoformat()
@@ -781,7 +635,7 @@ def run_standalone_check(
         markdown_output = export_to_markdown(report_data, input_filename)
         print(f"Markdown rapport opgeslagen als: {markdown_output}")
 
-    return crew_result
+    return report
 
 
 if __name__ == "__main__":
@@ -833,25 +687,25 @@ if __name__ == "__main__":
         elif sys.argv[1] == "--help":
             print("""
         Fact Checker - CrewAI Multi-Agent System
-        
+
         Gebruik:
         -------
         Fact Checking:
             python fact_checker.py --check [bestand.txt] [--markdown]
             echo "tekst om te checken" | python fact_checker.py --check [--markdown]
-            
+
         Voorbeelden:
             python fact_checker.py --check document.txt --markdown
             python fact_checker.py --check document.txt  # Alleen JSON export
             echo "Tesla heeft 50000 werknemers" | python fact_checker.py --check --markdown
-            
+
         Als Web UI:
             python fact_checker.py --web
             python fact_checker.py --web --host=0.0.0.0 --port=8080 --share
-            
+
         Opties:
             --markdown      Export resultaten ook als markdown bestand (fc_*.md)
-            
+
         In Python code:
             from fact_checker import run_fact_check_crew
             report = run_fact_check_crew("je tekst hier")
