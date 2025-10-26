@@ -147,18 +147,24 @@ Modify `fact_check_automator.sh` to detect file language and adjust accordingly.
 
 ## 🐛 Debug Mode
 
-To debug issues, modify `fact_check_automator.sh`:
+### Log Files
+
+**Log files are now automatically preserved!** Every fact-check run creates timestamped log files:
+
+- `fact_check_log_YYYYMMDD_HHMMSS.txt` - Standard output and progress
+- `fact_check_error_YYYYMMDD_HHMMSS.txt` - Errors and warnings
+
+These files are saved in the same directory as your input file and are **never deleted**.
+
+### Using Debug Script
+
+For detailed debugging output, use the debug script:
 
 ```bash
-# Change this line:
-"$PYTHON_PATH" "$FACT_CHECKER_SCRIPT" --check "$INPUT_FILE" --markdown > "$LOG_FILE" 2> "$ERROR_FILE"
-
-# To this (keeps log files):
-"$PYTHON_PATH" "$FACT_CHECKER_SCRIPT" --check "$INPUT_FILE" --markdown > "$LOG_FILE" 2> "$ERROR_FILE"
-# Comment out: rm -f "$LOG_FILE" "$ERROR_FILE"
+./debug_automator.sh "/path/to/your/document.txt"
 ```
 
-Then check `fact_check_log.txt` and `fact_check_error.txt` in the same folder as your input file.
+This provides detailed step-by-step output to help diagnose issues.
 
 ## 💡 Tips
 

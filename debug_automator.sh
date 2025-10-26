@@ -43,9 +43,10 @@ echo "Base name (no ext): $BASE_NAME_NO_EXT"
 echo "Changing to fact-checker directory..."
 cd "$FACT_CHECKER_DIR"
 
-# Set up log files
-LOG_FILE="$DIR_PATH/fact_check_log.txt"
-ERROR_FILE="$DIR_PATH/fact_check_error.txt"
+# Set up log files with timestamp
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+LOG_FILE="$DIR_PATH/fact_check_log_${TIMESTAMP}.txt"
+ERROR_FILE="$DIR_PATH/fact_check_error_${TIMESTAMP}.txt"
 
 echo "Log file: $LOG_FILE"
 echo "Error file: $ERROR_FILE"

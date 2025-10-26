@@ -35,9 +35,10 @@ osascript -e "display notification \"Starting fact check for $FILENAME\" with ti
 cd "$FACT_CHECKER_DIR"
 
 # Run the fact checker with markdown export
-# Redirect output to a log file for debugging
-LOG_FILE="$DIR_PATH/fact_check_log.txt"
-ERROR_FILE="$DIR_PATH/fact_check_error.txt"
+# Redirect output to a log file for debugging with timestamp
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+LOG_FILE="$DIR_PATH/fact_check_log_${TIMESTAMP}.txt"
+ERROR_FILE="$DIR_PATH/fact_check_error_${TIMESTAMP}.txt"
 
 # Run fact checker
 "$PYTHON_PATH" "$FACT_CHECKER_SCRIPT" --check "$INPUT_FILE" --markdown > "$LOG_FILE" 2> "$ERROR_FILE"
@@ -109,7 +110,6 @@ else
     osascript -e "display dialog \"Error during fact check: $ERROR_MSG\" buttons {\"OK\"} default button \"OK\" with icon stop"
 fi
 
-# Clean up log files if successful
-if [ $? -eq 0 ]; then
-    rm -f "$LOG_FILE" "$ERROR_FILE"
-fi
+# Keep log files for debugging and audit trail
+# Log files are now saved with timestamps and will NOT be deleted
+# They can be found at: $LOG_FILE and $ERROR_FILE

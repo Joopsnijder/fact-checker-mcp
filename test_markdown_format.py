@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Test the improved markdown formatting"""
 
-import sys
 import importlib.util
-from pathlib import Path
 from datetime import datetime
 
 # Import the module
