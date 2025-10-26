@@ -10,19 +10,27 @@ Now using custom agent loop instead of CrewAI.
 """
 
 import asyncio
-
-# Direct imports (no longer using importlib workaround)
+import importlib.util
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-# Import fact checker functions (renamed to avoid conflict with module name)
-import fact_checker as fc_module
 import gradio as gr
 
-# Import from refactored fact_checker module
+# Import from agents module
+from agents import FactCheckReport
 
+# Load fact-checker module (has hyphen in filename, needs importlib)
+spec = importlib.util.spec_from_file_location(
+    "fact_checker", Path(__file__).parent / "fact-checker.py"
+)
+fc_module = importlib.util.module_from_spec(spec)
+sys.modules["fact_checker"] = fc_module
+spec.loader.exec_module(fc_module)
+
+# Import specific functions
 run_fact_check_crew = fc_module.run_fact_check_crew
 quick_fact_check = fc_module.quick_fact_check
 fact_check_history = fc_module.fact_check_history
