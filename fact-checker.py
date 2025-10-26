@@ -506,10 +506,22 @@ For more information or to run your own fact checks, see the [Fact Checker docum
             f.write(markdown_content)
 
         # Set proper file permissions to ensure it can be opened
-        # Give read/write permissions to owner, read to group and others
+        # Give read/write permissions to owner, group, and others (0o644)
         import stat
+        import subprocess
 
         os.chmod(output_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+
+        # Remove ALL macOS extended attributes that can cause permission issues
+        # This includes quarantine, provenance, and other attributes
+        try:
+            subprocess.run(
+                ["xattr", "-c", str(output_file)],
+                capture_output=True,
+                check=False,
+            )
+        except Exception:
+            pass  # Ignore if xattr removal fails
 
         return str(output_file)
 
@@ -536,10 +548,21 @@ For more information or to run your own fact checks, see the [Fact Checker docum
 
             # Set proper file permissions
             import stat
+            import subprocess
 
             os.chmod(
                 fallback_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
             )
+
+            # Remove ALL macOS extended attributes
+            try:
+                subprocess.run(
+                    ["xattr", "-c", str(fallback_file)],
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass
 
             print(f"Fact check report saved to Desktop: {fallback_file}")
             return str(fallback_file)
